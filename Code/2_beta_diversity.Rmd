@@ -200,12 +200,14 @@ ggplot(df_NMDS, aes(x=NMDS1,y=NMDS2,
                     fill=MeJA_treatment, #inside
                     shape=Plant_species,
                     color=Sample_type)) + #outline
-  geom_point(aes(color=Sample_type, fill=MeJA_treatment, size=4))+ # individual sample values
+  geom_point(aes(color=Sample_type, fill=MeJA_treatment), size=5)+ # individual sample values
   scale_shape_manual(values=c(21,24))+
   scale_color_manual(values = c("black", "white"))+ #outline
   scale_fill_manual(values=color_treatments)+ #inside
   ggtitle("NMDS_full")+
-  axis_looks
+  axis_looks+
+  theme(legend.position = "none")
+  
 
 #save plot
 mapply(function(x)
@@ -214,13 +216,12 @@ mapply(function(x)
   filename =x,
   path = "./Plots/02_beta_diversity",
   scale = 1.5,
-  width = 1200,
-  height = 850,
+  width = 1000,
+  height = 900,
   units = "px",
   dpi = 300),
 x=c("NMDS_Full.svg","NMDS_Full_16S.png"))
 
-metadata <- as(sample_data(physeq_filtered_CSS), "data.frame")
 ```
 
 
@@ -282,13 +283,14 @@ plot_NMDS <- function(df,title){
   geom_segment(data = df,
                mapping = aes(x=NMDS1, y=NMDS2, 
                xend = NMDS1_centroid, yend = NMDS2_centroid))+
-  geom_point(aes(fill=MeJA_treatment), shape=21, color="black", size=2, alpha=0.95)+ # individual sample values
+  geom_point(aes(fill=MeJA_treatment), shape=21, color="black", size=3, alpha=0.95)+ # individual sample values
   geom_point(aes(x=NMDS1_centroid, y = NMDS2_centroid),
              size = 5, alpha=0.9, shape=21, color="black") + # centroids
   scale_fill_manual(values = color_treatments)+ #outline
   scale_color_manual(values = color_treatments)+ #outline
   ggtitle(title)+
-  axis_looks
+  axis_looks+
+  theme(legend.position = "none")
   return(p)
 }
 
@@ -299,7 +301,7 @@ BO_Endo <- plot_NMDS(df_NMDS_split_full$Bo_Root, "BO_Endo")
 BO_Rhizo <- plot_NMDS(df_NMDS_split_full$Bo_Soil, "BO_Rhizo")
 
 #Make it a single figure 
-ggarrange(AT_Endo, AT_Rhizo,BO_Endo, BO_Rhizo,  ncol=2, nrow=2,common.legend = TRUE,legend="bottom")
+ggarrange(AT_Endo, AT_Rhizo,BO_Endo, BO_Rhizo,  ncol=2, nrow=2)
 
 #save plot
 mapply(function(x)
@@ -393,16 +395,18 @@ you will need to run, test and check several different models and data slices to
 ```{r}
 # Running the permanova with vegan::adonis2() on a single phyloseq object is very simple
 metadata <- as(sample_data(physeq_filtered_CSS), "data.frame")
+
 # let's first define permitation design with permute::how()
 perm2 <- how(
   within = Within(type = "free"), # permute observations freely within the blocks. got to ask Fred how to handle grid arrangements!
-  blocks = metadata$Block, # define blocks
+  #blocks = metadata$Block, # define blocks
   nperm = 999
 ) # n of permutations
 set.seed(5235)
+
 # now let's calculate the permanova
 three_way_permanova <- adonis2(phyloseq::distance(t(otu_table(physeq_filtered_CSS)), method = "bray") # this is your distance matrix of OTU abundances
-~ MeJA_treatment * Plant_species * Sample_type + Block, # this is your model
+~ MeJA_treatment * Plant_species * Sample_type, # this is your model
 permutations = perm2, # we jsut defined the permutation settings above, you place them here
 data = metadata
 ) # metadata for the community matrix
@@ -412,9 +416,9 @@ data = metadata
 #### -------- soft-coded, 3 lists of phyloseq objects with 1 formula ---###
 
 # let's check now if sample type differ per species. note that this function uses Blocks as strata
-permanova_with_blocks <- function(phyloseq_list, rhs_model) {
+permanova_with_list <- function(phyloseq_list, rhs_model) {
   # phyloseq_list = list of phyloseq objects
-  # RHS_model = right hand side model, such as MeJA_treatment*Sample_type + Block
+  # RHS_model = right hand side model, such as MeJA_treatment*Sample_type
   lapply(phyloseq_list, function(x) {
     lhs_data <- phyloseq::distance(t(otu_table(x)), method = "bray")
     rhs_model_in <- paste(rhs_model)
@@ -427,43 +431,18 @@ permanova_with_blocks <- function(phyloseq_list, rhs_model) {
   })
 }
 
-# run custom funcion
+# run custom function to get results per sub-community
 set.seed(5235)
-permanova_with_blocks(ps_list_CSS, "MeJA_treatment + Block")
-
+perm_by4 <- permanova_with_list(ps_list_CSS, "MeJA_treatment")
+perm_by4 <- lapply(perm_by4, function(perm){as.data.frame(perm)})
 
 ```
-## 2.4 pairwise PERMANOVA
-
-Now that we know the fixed factor effects and interactions, let's make pairwise comparisons.for this we will use EcolUtils::adonis.pair - with lists and p adjust, no blocks
-
-```{r}
-
-# pairwise coparisons over a list fo 4 ps obects
-set.seed(5235)
-lapply(ps_list_CSS, function(x) {
-  adonis.pair(
-    dist.mat = phyloseq::distance(otu_table(x), method = "bray"),
-    Factor = as.factor(as(phyloseq::sample_data(x), "data.frame")$MeJA_treatment)
-  )
-})
-
-
-# pairwise coparisons over afull community
-adonis.pair(
-dist.mat = phyloseq::distance(otu_table(physeq_filtered_CSS), method = "bray"),
-Factor = as.factor(as(phyloseq::sample_data(physeq_filtered_CSS), "data.frame")$MeJA_treatment)
-)
-
-
-
-```
-
 
 # 2.5 - Save session
 ```{r}
 
 save.image("./R output/analysis_session.RData")
+
 ```
 
 
