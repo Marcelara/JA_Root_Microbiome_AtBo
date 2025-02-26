@@ -9,10 +9,140 @@ editor_options:
 
 # load libraries and data
 ```{r}
-source("./Code/Functions/load_libraries.R")
-load("./R output/env.1_Loading_and_pre_processing.RData")
+
+#Set working directory to project directory 
+setwd("./")
+getwd() #ok
+
+#Handling data 
+library("dplyr")
+library("tibble")
+library("stringr")  # to wrangle string vectors
+library("tidyr")
+library("ggrepel")  # to avoid legends overlapping in your plot
+library("ggpubr")
+library("purrr")  # has map() to select table elements
+
+#Microbiome
+library("vegan")  # for several essential statistical tests
+library("forcats")
+library("metagMisc")  # lets you create lists of split phyloseq objects
+library("phyloseq")
+library("decontam")
+library("metagenomeSeq")
+library("Biostrings")
+library("mikropml")
+
+#Visuals
+library("ggplot2")
+
+#stats
+library("agricolae")  # includes some ANOVA post-hoc options
+library("minpack.lm")  # lets you do some HSD tests, output is a nice table
+library("car")  # for Levene's test
+
 ```
 
+Now, get the data from script 1
+```{r}
+
+load("./R output/env.1_Loading_and_pre_processing.RData")
+
+#remove all that you dont need
+rm(CSS_matrix, decontam_output, MRexp_objt, physeq, physeq_clean, physeq_decontaminated, physeq_norm_pa_neg)
+
+#Check ps objects
+normalization_listed$physeq_filtered #original ps, non-normalized, full dataset, same as physeq_filtered
+normalization_listed$physeq_filtered_rarefied #rarefied, full dataset
+normalization_listed$physeq_filtered_CSS #CSS-normalized, full dataset
+
+```
+
+Let's get the summary of reads in the raw phyloseq
+```{r}
+
+# Add new variable 'Sp' as a short name for species
+normalization_listed <- lapply(normalization_listed, function(ps){
+                        # Add new column 'Sp' with short species names
+              sample_data(ps)$Sp <- ifelse(sample_data(ps)$Plant_species == "Arabidopsis_thaliana", "At",
+                                          ifelse(sample_data(ps)$Plant_species == "Brassica_oleraceae", "Bo", NA))
+
+                        # Check the first few rows
+                        print(head(sample_data(ps)$Sp))
+                        
+                        #return
+                        return(ps)})
+
+#Now add other variable ('Sp_Comp') with the combination of Sp and root compartment (Sample_type)
+normalization_listed <- lapply(normalization_listed, function(ps){
+                        # Add new column 'Sp' with short species names
+                        sample_data(ps)$Sp_Comp <- paste(sample_data(ps)$Sp,
+                                              sample_data(ps)$Sample_type, 
+                                              sep = "_")
+
+                        # Check the first few rows
+                        print(head(sample_data(ps)$Sp_Comp))
+                        
+                        #return
+                        return(ps)})
+
+#Add as well the number of reads and the number of ASVs 
+normalization_listed <- lapply(normalization_listed, function(ps){
+                        # Add new column 'library_size' 
+                        sample_data(ps)$library_size <- sample_sums(ps)
+                        
+                        #Add new column 'Num_ASVs'
+                        sample_data(ps)$Num_ASV <- apply(otu_table(ps), 2, function(x) sum(x > 0))
+
+                        # Check the first few rows
+                        print(head(sample_data(ps)))
+                        
+                        #return
+                        return(ps)})
+
+#let's check sample_data
+lapply(normalization_listed, function(ps){head(sample_data(ps))})
+
+#split it to get number of ASVs per sub-community
+ps_root_soil <- phyloseq_sep_variable(normalization_listed$physeq_filtered, variable = "Sp_Comp")
+
+#get summary
+#make a df 
+sample_data <- normalization_listed$physeq_filtered %>% 
+    sample_data() %>% 
+    data.frame()
+
+#let's quickly check how many replicates we have left per Sp and Root compartment (Root=Endosphere, Soil=Rhizosphere)
+#and how is the library size amongst them. [part of Supplementary Table S1]
+sample_data %>% 
+    group_by(Sp, Sample_type)%>%
+    dplyr::summarise(Replicates = n(),
+              library_size = mean(library_size),
+              stdev_libsize =sd(library_size, na.rm = TRUE))
+
+```
+
+## Settings for plots 
+```{r}
+
+#Set plots theme
+ggplot2::theme_set(theme_bw())
+
+# Set default axis looks
+axis_looks <- theme(axis.text.x = element_text(colour = "black", size = 9,
+                                               face = "bold", angle=0, hjust=0.5))+ #text in X
+  theme(axis.text.y = element_text(colour = "black", size = 9, face = "bold"))+ #text in y
+  theme(axis.title=element_text(size=11, face = "bold"))+ #all texts
+  theme(axis.title.y = element_text(margin = ggplot2::margin(t = 0, r = 10, b = 0, l = 0)))+
+  theme(panel.grid.major = element_blank(), #no grid
+        panel.grid.minor = element_blank()) #no grid
+
+#Set colors
+color_treatments <- c("#FBF2C4", "#DEA868", "#C7522B", "#9BBAA0") #"Control", "MeJA 0.1mM", "MeJA 1mM", "P. brassicae OS"
+color_species <- c("#146627ff", "#1fb695ff") #at & bo, respectively
+color_compartment <- c("#e7b083ff", "#905423ff") #endo & rhizo, respectively
+
+```
 
 
 
@@ -27,7 +157,7 @@ Beta diversity plots are the beating heart or microbiome analysis. here you will
 ```{r}
 
 # Let's make a Non-Metric Multidimensional Scaling (NMDS) of all our samples based on CSS normalization
-nmds_rootAndSoil <- phyloseq::ordinate(physeq_filtered_CSS,
+nmds_rootAndSoil <- phyloseq::ordinate(normalization_listed$physeq_filtered_CSS,
   method = "NMDS", # this method has few assumptions and readly accepts different data structures
   distance = "bray", # bray-curtis distance is suitable for sparse data - such as the zero-inflated microbiome data we have
   try = 200, # number of iterations
@@ -35,16 +165,60 @@ nmds_rootAndSoil <- phyloseq::ordinate(physeq_filtered_CSS,
 ) # automatically transforms your data, if needed. reduces weight of outliers
 # weakties = FALSE prevests tress from colapsing into zero
 
-plot_ordination(
-  physeq = physeq_filtered_CSS,
-  ordination = nmds_rootAndSoil,
-  color = "MeJA_treatment",
-  shape = "Plant_species"
-) +
-  theme_classic() +
-  theme(plot.title = element_text(size = 10, face = "bold", hjust = 0.5)) +
-  geom_point(aes(size = Sample_type), alpha = 1) +
-  theme(legend.position = "right")
+#First get a short version of sample data df to be used as metadata for NMDS
+df_info <- sample_data(normalization_listed$physeq_filtered_CSS) %>% 
+               data.frame() %>% 
+               dplyr::select(Plant_species, Sample_type, Sp_Comp, MeJA_treatment)%>%
+               mutate(sample_name=rownames(.))
+
+#call function
+get_NMDS_coordenates <- function(x,y){
+  
+  #x is a phyloseq
+  #should be a string in between "" with the distance (i.e. "bray")
+  
+  df_nmds <- lapply(y, function(dist){
+    ord <- ordinate(x, "NMDS", distance=dist, try=200, autotransform=TRUE)
+    nMDS <- plot_ordination(x, ord, color="MeJA_treatment")
+    df_NMDS <- nMDS$data
+    df_NMDS <- df_NMDS %>% dplyr::select(Plant_species, Sample_type, Sp_Comp,MeJA_treatment,NMDS1, NMDS2)
+    df_NMDS$sample_name <- rownames(df_NMDS)
+    df_NMDS <- df_NMDS %>% relocate(sample_name)
+    return(df_NMDS)
+    })
+
+  #ord will be a list 
+  return(df_nmds)
+}
+
+#get coordinates
+df_NMDS <- get_NMDS_coordenates(normalization_listed$physeq_filtered_CSS, "bray")
+df_NMDS <- df_NMDS[[1]] #it was a list before idk why
+
+#plot NMDS 
+ggplot(df_NMDS, aes(x=NMDS1,y=NMDS2, 
+                    fill=MeJA_treatment, #inside
+                    shape=Plant_species,
+                    color=Sample_type)) + #outline
+  geom_point(aes(color=Sample_type, fill=MeJA_treatment, size=4))+ # individual sample values
+  scale_shape_manual(values=c(21,24))+
+  scale_color_manual(values = c("black", "white"))+ #outline
+  scale_fill_manual(values=color_treatments)+ #inside
+  ggtitle("NMDS_full")+
+  axis_looks
+
+#save plot
+mapply(function(x)
+  ggsave(
+  plot = last_plot(),
+  filename =x,
+  path = "./Plots/02_beta_diversity",
+  scale = 1.5,
+  width = 1200,
+  height = 850,
+  units = "px",
+  dpi = 300),
+x=c("NMDS_Full.svg","NMDS_Full_16S.png"))
 
 metadata <- as(sample_data(physeq_filtered_CSS), "data.frame")
 ```
