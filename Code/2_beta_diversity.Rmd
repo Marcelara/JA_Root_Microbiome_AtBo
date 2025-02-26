@@ -228,54 +228,92 @@ metadata <- as(sample_data(physeq_filtered_CSS), "data.frame")
 
 ```{r}
 
-# define custom fucntion to plot a list of NMDS results
-NMDS_listing <- function(physeq_list) { # first the name of the new function you are saving, then you say you are going to define a function, and then you set it's arguments - here, a single list of phyloseq objects. the {} indicate where the contents of the custom function start and end.
+#Now get a NMDS for each sub-community, for this make a list of 4 ps
+ps_list_CSS2 <- phyloseq_sep_variable(normalization_listed$physeq_filtered_CSS, variable = "Sp_Comp")
 
-  # here we perform the NMDS on all elements of the list using phyloseq::ordinate()
-  NMDS_list <- lapply(physeq_list, function(x) {
-    ordinate(
-      physeq = x, # your phyloseq object, each element x in the list
-      method = "NMDS", # ordination method to use
-      distance = "bray", # distance metric to use
-      try = 200, # number of permutations
-      autotransform = TRUE
-    )
-  }) # automatic data transformation
+#call function again to change metadata and only select MeJA treatment
+get_NMDS_coordenates <- function(x,y){
+  
+  #x is a phyloseq
+  #should be a string in between "" with the distance (i.e. "bray")
+  
+  df_nmds <- lapply(y, function(dist){
+    ord <- ordinate(x, "NMDS", distance=dist, try=200, autotransform=TRUE)
+    nMDS <- plot_ordination(x, ord, color="MeJA_treatment")
+    df_NMDS <- nMDS$data
+    df_NMDS <- df_NMDS %>% dplyr::select(MeJA_treatment,NMDS1, NMDS2)
+    df_NMDS$sample_name <- rownames(df_NMDS)
+    df_NMDS <- df_NMDS %>% relocate(sample_name)
+    return(df_NMDS)
+    })
 
-  # mapply will perform one function on two lists. define the lists in the end of the function
-  untitled_plot_list <- mapply(function(x, y) { # mapply will run one function on 2 lists
-    plot_ordination(
-      physeq = x, # your phyloseq object, each element x in the list
-      ordination = y, # your phyloseq-generated ordination object, each element y in the list made above
-      color = "MeJA_treatment"
-    ) + # dot colors in the plot
-      theme_classic() + # ggplot option to remove background
-      labs(subtitle = paste("Stress:", round(y$stress, digits = 4))) + # this adds the NMDS stress to the plot as subtitle
-      theme(plot.title = element_text(size = 10, face = "bold")) + # options for the title
-      theme(legend.position = "right")
-  }, # position for the legend
-  x = physeq_list, # note that you only define x here, after you define your plot function
-  y = NMDS_list, # note that you only definee y here, after you define your plot function
-  SIMPLIFY = FALSE
-  ) # if you simply, all resusts are saved in a vector
-
-  # The plots above miss a title, so you don't really know who is root and who is soil. this code create a list of names to be used as titles in your plot
-  tiles_list <- names(untitled_plot_list)
-
-  Plot_list <- mapply(function(z, w) { # use mapply again to put those listed names in the list of plots
-    z + ggtitle(w)
-  },
-  z = untitled_plot_list,
-  w = tiles_list,
-  SIMPLIFY = FALSE
-  )
-
-  return(list(NMDS_list, Plot_list)) # with this you specify the output of your custom function. Note we are saving both the NMDS calculations and the plot as a list, so we don't ahve to re-calculate the NMDS later
+  #ord will be a list 
+  return(df_nmds)
 }
 
-# let's run our custom function
-set.seed(5235)
-NMDS_4_slice <- NMDS_listing(ps_list_CSS)
+#get coordinates with lapply
+df_NMDS_split <- lapply(ps_list_CSS2, function(ps){
+          df <- get_NMDS_coordenates(ps, "bray")
+          df <- df[[1]]
+          return(df)})
+
+#Now, get centroids 
+centroids <- lapply(df_NMDS_split, function(df){
+  df <- aggregate(cbind(NMDS1, NMDS2) ~ MeJA_treatment, data=df, FUN=mean)
+  return(df)})
+
+#Finally, get full df to be able to draw segments for this use mapply to go over two lists
+df_NMDS_split_full <- mapply(function(df_NMDS_split, centroid_df) {
+  merge(df_NMDS_split, centroid_df,
+        by = "MeJA_treatment", all.x = TRUE, suffixes=c("", "_centroid"))},
+  df_NMDS_split, centroids, SIMPLIFY = FALSE)
+
+df_NMDS_split_full <- lapply(df_NMDS_split_full, function(list){ as.data.frame(list)})
+  
+#Now, plot the NMDS, first call a function
+plot_NMDS <- function(df,title){
+  #x is df 
+  #y is the centroid df
+  #z is segment df
+  #title is the name of the title in between ""
+  p <- ggplot(df, aes(x=NMDS1,y=NMDS2, 
+                    fill=MeJA_treatment,
+                    color=MeJA_treatment)) + #outline
+  geom_segment(data = df,
+               mapping = aes(x=NMDS1, y=NMDS2, 
+               xend = NMDS1_centroid, yend = NMDS2_centroid))+
+  geom_point(aes(fill=MeJA_treatment), shape=21, color="black", size=2, alpha=0.95)+ # individual sample values
+  geom_point(aes(x=NMDS1_centroid, y = NMDS2_centroid),
+             size = 5, alpha=0.9, shape=21, color="black") + # centroids
+  scale_fill_manual(values = color_treatments)+ #outline
+  scale_color_manual(values = color_treatments)+ #outline
+  ggtitle(title)+
+  axis_looks
+  return(p)
+}
+
+#plot it
+AT_Endo <- plot_NMDS(df_NMDS_split_full$At_Root, "AT_Endo")
+AT_Rhizo <- plot_NMDS(df_NMDS_split_full$At_Soil, "AT_Rhizo")
+BO_Endo <- plot_NMDS(df_NMDS_split_full$Bo_Root, "BO_Endo")
+BO_Rhizo <- plot_NMDS(df_NMDS_split_full$Bo_Soil, "BO_Rhizo")
+
+#Make it a single figure 
+ggarrange(AT_Endo, AT_Rhizo,BO_Endo, BO_Rhizo,  ncol=2, nrow=2,common.legend = TRUE,legend="bottom")
+
+#save plot
+mapply(function(x)
+  ggsave(
+  plot = last_plot(),
+  filename =x,
+  path = "./Plots/02_beta_diversity",
+  scale = 1.8,
+  width = 1000,
+  height = 900,
+  units = "px",
+  dpi = 300),
+x=c("NMDS_SpComp.svg","NMDS_SpComp.png"))
+
 ```
 
 
