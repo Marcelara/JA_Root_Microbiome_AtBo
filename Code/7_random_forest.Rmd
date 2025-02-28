@@ -8,12 +8,53 @@ editor_options:
 ---
 
 # load libraries and data
+Skip if you started in the previous script 6 and just load the new packages needed for this script
 ```{r}
-source("./Code/Functions/load_libraries.R")
-load("./R output/analysis_session.RData")
+#Set working directory to project directory 
+setwd("./")
+getwd() #ok
+
+#Handling data 
+library("dplyr")
+library("tibble")
+library("stringr")  # to wrangle string vectors
+library("tidyr")
+library("ggrepel")  # to avoid legends overlapping in your plot
+library("ggpubr")
+library("purrr")  # has map() to select table elements
+
+#Microbiome
+library("vegan")  # for several essential statistical tests
+library("forcats")
+library("metagMisc")  # lets you create lists of split phyloseq objects
+library("phyloseq")
+library("decontam")
+library("metagenomeSeq")
+library("Biostrings")
+library("mikropml")
+
+#Visuals
+library("ggplot2")
+
+#stats
+library("agricolae")  # includes some ANOVA post-hoc options
+library("minpack.lm")  # lets you do some HSD tests, output is a nice table
+library("car")  # for Levene's test
+
+#New in this script
+library("Boruta")  # for random forest feature selection
+library("mlbench")  # for random forest
+library("caret")  # for random forest
+library("randomForest")  # for random forest
+
+
 ```
 
-
+[SKIP if coming from script 6]
+```{r}
+#source("./Code/Functions/load_libraries.R")
+#load("./R output/analysis_session.RData")
+```
 
 
 # 7.0 - Random forest
@@ -21,11 +62,10 @@ I've used this tutorial https://www.andreaperlato.com/mlpost/feature-selection-u
 you can also conside rthis: https://www.analyticsvidhya.com/blog/2016/03/select-important-variables-boruta-package/
 https://www.analyticsvidhya.com/blog/2021/05/boruta-with-r-is-a-great-way-to-address-the-curse-of-dimensionality/
 
-
+Skip until line to just upload the data 
 
 ## 7.1 - using borutra over a list of phyloseq objects
 ```{r boruta}
-
 
 # prepare phyloseq object to be an input in Boruta
 physeq_to_borutaInput <- function(list_physeq_object, variable_to_be_classified) {
@@ -106,9 +146,6 @@ boruta_history <- lapply(fixed_boruta_objt_list, function(x) {
 ```
 
 
-
-
-
 ##7.3 - Cheking Boruta precision with 100-repeated 5-fold cross-validation, over the list of 4 borutized random forested
 ```{r boruta}
 
@@ -146,9 +183,6 @@ map(boruta_feature_rf_repeatedcv, confusionMatrix)
 ```
 
 
-
-
-
 ## 7.4 - add the rf classification as part of the OTU taxonomy
 ```{r boruta}
 ##############################################################################################################
@@ -178,11 +212,8 @@ write.csv(select(rf_added_tax$Arabidopsis_thaliana.Root, random_forest_relevance
 write.csv(select(rf_added_tax$Brassica_oleraceae.Root, random_forest_relevance), "bo_root_rfimp.csv", row.names = TRUE)
 ```
 
-
-
 #7.6 - barplot of rf features
 ```{r}
-
 
 # get boruta stats of ASVs confirmed to be important
 rf_importance_byOTU <- lapply(fixed_boruta_objt_list, function(x) {
@@ -251,7 +282,214 @@ ggsave(plot_rf,
 
 
 
-# 7.8 - overwrite saved session
+#Import data
+```{r}
+
+ps_list_rarefied #this is the ps used to calculate RF
+
+#this is a list of the classification of ASVs from the rarefied ps based on RF
+at_soil_rfimp <- read_csv("./R output/07_random_forest/at_soil_rfimp.csv")
+at_root_rfimp <- read_csv("./R output/07_random_forest/at_root_rfimp.csv")
+bo_soil_rfimp <- read_csv("./R output/07_random_forest/bo_soil_rfimp.csv")
+bo_root_rfimp <- read_csv("./R output/07_random_forest/bo_root_rfimp.csv")
+
+#check
+colnames(at_root_rfimp)
+
+#make it a list 
+rf_asv_list <- list(at_soil_rfimp = at_soil_rfimp,
+                    at_root_rfimp = at_root_rfimp, 
+                    bo_soil_rfimp = bo_soil_rfimp, 
+                    bo_root_rfimp = bo_root_rfimp)
+
+rf_asv_list <- lapply(rf_asv_list, function(df){
+  colnames(df)[1] <- "ASV"
+  return(df)})
+
+```
+
+```{r}
+
+# Step 1: Combine your phyloseq list and RF importance list into a named list of pairs
+ps_rf_list <- list(
+  at_soil = list(physeq = ps_list_rarefied$Arabidopsis_thaliana.Soil, rf = rf_asv_list$at_soil_rfimp),
+  at_root = list(physeq = ps_list_rarefied$Arabidopsis_thaliana.Root, rf = rf_asv_list$at_root_rfimp),
+  bo_soil = list(physeq = ps_list_rarefied$Brassica_oleraceae.Soil, rf = rf_asv_list$bo_soil_rfimp),
+  bo_root = list(physeq = ps_list_rarefied$Brassica_oleraceae.Root, rf = rf_asv_list$bo_root_rfimp)
+)
+
+# Function to filter phyloseq object to important ASVs and extract combined data
+get_important_phyloseq_and_df <- function(ps_rf_pair) {
+  
+  ps <- ps_rf_pair$physeq
+  rf <- ps_rf_pair$rf
+  
+  # Filter to keep only important ASVs
+  important_asvs <- rf %>%
+    filter(random_forest_relevance == "important") %>%
+    pull(ASV)
+  
+  # Subset phyloseq object
+  ps_important <- prune_taxa(taxa_names(ps) %in% important_asvs, ps)
+  
+  # Extract OTU table (abundance data)
+  abundances <- as.data.frame(otu_table(ps_important)) %>%
+    rownames_to_column(var = "ASV")
+  
+  # Extract taxonomy table
+  taxonomy <- as.data.frame(tax_table(ps_important)) %>%
+    rownames_to_column(var = "ASV")
+  
+  # Merge OTU and taxonomy (this is per ASV)
+  combined_df <- left_join(abundances, taxonomy, by = "ASV")
+  
+  return(list(phyloseq = ps_important, combined_df = combined_df))
+}
+
+# Apply to all 4 sub-communities, you will get a pruned ps with the important ASVs,
+#as well as just the Tax and OTU tables ($combined_df)
+
+important_data_list <- lapply(ps_rf_list, get_important_phyloseq_and_df)
+
+#save this output
+saveRDS(important_data_list, "./R output/07_random_forest/important_data_list.rds")
+```
+
+
+```{r}
+#Now let's make it into a df so we can plot it 
+# First, pivot each combined df to long format
+important_long_list <- lapply(names(important_data_list), function(name) {
+  
+  combined_df <- important_data_list[[name]]$combined_df  # Your combined_df contains abundance + taxonomy
+
+  # Separate abundance (samples) and taxonomy columns
+  taxonomy_columns <- c("Domain", "Phylum", "Class", "Order", "Family", "Genus", "Species")
+  abundance_df <- combined_df %>%
+    select(ASV, starts_with("Sample") | matches("^\\d")) # assuming sample columns have names like "Sample_1" or "11_Soil"
+  
+  taxonomy_df <- combined_df %>%
+    select(ASV, all_of(taxonomy_columns))
+
+  # Pivot the abundance table
+  combined_long <- abundance_df %>%
+    pivot_longer(cols = -ASV, names_to = "sample", values_to = "abundance") %>%
+    left_join(taxonomy_df, by = "ASV") %>%  # Add taxonomy back after pivoting
+    mutate(Sub_community = name)  # Add sub-community column
+
+  return(combined_long)
+})
+
+# Combine all into one dataframe
+final_long_df <- bind_rows(important_long_list)
+
+# Reorder columns for readability (optional)
+final_long_df <- final_long_df %>%
+  select(Sub_community, ASV, sample, abundance, everything())
+
+# Preview
+head(final_long_df)
+
+# Extract metadata for all phyloseq objects
+sample_metadata_list <- lapply(ps_list_rarefied, function(ps) {
+  as(sample_data(ps), "data.frame") %>%
+    rownames_to_column(var = "sample") %>%
+    select(sample, MeJA_treatment, Plant_species, Sample_type)
+})
+
+# Combine all metadata into one big dataframe
+sample_metadata_all <- bind_rows(
+  "at_root" = sample_metadata_list$Arabidopsis_thaliana.Root,
+  "at_soil" = sample_metadata_list$Arabidopsis_thaliana.Soil,
+  "bo_root" = sample_metadata_list$Brassica_oleraceae.Root,
+  "bo_soil" = sample_metadata_list$Brassica_oleraceae.Soil,
+  .id = "Sub_community"
+)
+
+final_long_df_with_meta <- final_long_df %>%
+  left_join(sample_metadata_all, by = c("Sub_community", "sample"))
+
+# Reorder columns for readability (optional)
+final_long_df_with_meta  <- final_long_df_with_meta  %>%
+  select(Sub_community, Plant_species, Sample_type, MeJA_treatment, sample, ASV, abundance, everything())
+
+# Save to file
+write.csv(final_long_df_with_meta, "./R output/07_random_forest/full_important_data_long.csv", row.names = FALSE)
+
+
+#plot it
+ggplot(final_long_df_with_meta, aes(x = ASV, y = abundance, fill = MeJA_treatment)) +
+  geom_boxplot(aes(x = ASV, y = abundance, fill = MeJA_treatment))+
+  geom_jitter(aes(x = ASV, y = abundance, color = MeJA_treatment), 
+              position = position_jitterdodge(jitter.width = 0.2, dodge.width = 0.75), 
+              size = 0.8, alpha = 0.7) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  scale_fill_manual(values = color_treatments) +
+  scale_color_manual(values = color_treatments) +
+  labs(x = "ASV", y = "Abundance", fill = "MeJA Treatment")+
+  axis_looks+
+  facet_wrap(Sample_type ~ Plant_species, scales="free")+
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1))
+
+
+```
+
+Now plot it with family information
+```{r}
+
+#make name of ASVs with Genus/Family information
+df <- final_long_df_with_meta %>%
+  mutate(
+    Genus_display = ifelse(is.na(Genus) | Genus == "NA" | Genus == "", "Unknown", Genus),
+    Genus_display = gsub("^g__", "", Genus_display),
+    Genus_ASV_label = paste0(Genus_display, "_ASV-", gsub("ASV_", "", ASV)),  # Genus_ASV-1
+
+    Family_display = ifelse(is.na(Family) | Family == "NA" | Family == "", "Unknown", Family),
+    Family_display = gsub("^f__", "", Family_display),
+
+    Family_display_short = str_sub(Family_display, 1, 5),
+    Family_display_short = paste0(Family_display_short, "_ASV-", gsub("ASV_", "", ASV))  # Strep_ASV-1
+  )
+
+
+# Plot
+ggplot(df, aes(x = Family_display_short, y = abundance, fill = MeJA_treatment)) +
+  geom_boxplot(aes(x = Family_display_short, y = abundance, fill = MeJA_treatment),
+               outlier.shape = 8, outlier.size = 1.2)+
+  geom_jitter(aes(x = Family_display_short, y = abundance, fill = MeJA_treatment), 
+              position = position_jitterdodge(jitter.width = 0.2, dodge.width = 0.75), 
+              shape=21, stroke= 0.5, size = 0.7, alpha = 0.7) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  scale_fill_manual(values = color_treatments) +
+  scale_color_manual(values = color_treatments) +
+  labs(x = "ASV", y = "Abundance", fill = "MeJA Treatment")+
+  axis_looks+
+  facet_wrap(Sample_type ~ Plant_species, scales="free")+
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1))+
+  theme(legend.position = "top")
+
+
+#save plot
+mapply(function(x)
+  ggsave(
+  plot = last_plot(),
+  filename =x,
+  path = "./Plots/07_random_forest",
+  scale = 2.0,
+  width = 2000,
+  height = 1500,
+  units = "px",
+  dpi = 300),
+x=c("RF_important_ASVs.svg","RF_important_ASVs.png"))
+
+  
+```
+
+
+
+
+
+# 7.8 - overwrite saved session[SKIP]
 ```{r}
 
 save.image("./R output/analysis_session.RData")
