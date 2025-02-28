@@ -51,13 +51,11 @@ imp_genus_l<-names(which(table(imp_genus_l)>2))%>%
   unique()%>% 
   as.list(c()) 
 
-
-
-
-
-
-
-
+#make a list 
+imp_l <- list(imp_phylum_l = imp_phylum_l,
+              imp_order_l = imp_order_l,
+              imp_fam_l = imp_fam_l,
+              imp_genus_l = imp_genus_l)
 
 # second, get the number of taxa occuring in each taxonomic group, within the imporntat taxa subset
 
@@ -91,12 +89,6 @@ for(i in imp_genus_l) {
   target_in_important_n[i]<-ntaxa(prune_taxa(taxa = tax_table(ps_important_taxa)[,"Genus"] %in% i,
                                              x = ps_important_taxa))
 }
-
-
-
-
-
-
 
 
 
@@ -134,13 +126,6 @@ for(i in imp_genus_l) {
 }
 
 
-
-
-
-
-
-
-
 # now, get the total number of taxa in the imporntat subset and in the full dataset
 
 # all important taxa
@@ -148,13 +133,6 @@ all_taxa_in_important_n<-ntaxa(ps_important_taxa)
 
 #all taxa 
 all_taxa_in_all_n<-ntaxa(ps_all_taxa)
-
-
-
-
-
-
-
 
 
 # now perform fisher tests over lists; check online tutorials for fisher.test() if need
@@ -170,7 +148,17 @@ fisher_result<-mapply(function (target_in_important_n,target_in_all_n)
   target_in_important_n = target_in_important_n,
   SIMPLIFY = FALSE)
 
-return(fisher_result)
+
+
+result_list <- list(fisher_result = fisher_result,
+                    important_l = imp_l, #list with all of the ASVs that are important in each taxonomic category (?)
+                    target_in_important_n = target_in_important_n, #no idea
+                    target_in_all_n = target_in_all_n,
+                    all_taxa_in_important_n = all_taxa_in_important_n,
+                    all_taxa_in_all_n = all_taxa_in_all_n)
+
+
+return(result_list)
 
 }
 
