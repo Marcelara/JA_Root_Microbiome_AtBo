@@ -10,9 +10,57 @@ editor_options:
 
 
 # load libraries and data
+
+Skip if you started in the previous scripts 
 ```{r}
-source("./Code/Functions/load_libraries.R")
-load("./R output/analysis_session.RData")
+#Set working directory to project directory 
+setwd("./")
+getwd() #ok
+
+#Handling data 
+library("dplyr")
+library("tibble")
+library("stringr")  # to wrangle string vectors
+library("tidyr")
+library("ggrepel")  # to avoid legends overlapping in your plot
+library("ggpubr")
+library("purrr")  # has map() to select table elements
+
+#Microbiome
+library("vegan")  # for several essential statistical tests
+library("forcats")
+library("metagMisc")  # lets you create lists of split phyloseq objects
+library("phyloseq")
+library("decontam")
+library("metagenomeSeq")
+library("Biostrings")
+library("mikropml")
+
+
+#Visuals
+library("ggplot2")
+
+#stats
+library("agricolae")  # includes some ANOVA post-hoc options
+library("minpack.lm")  # lets you do some HSD tests, output is a nice table
+library("car")  # for Levene's test
+
+#New in this script
+library(tyRa)
+library(Hmisc)
+library(EcolUtils)
+library(ggVennDiagram)
+
+```
+
+Load data if starting from scratch
+```{r}
+#load("./R output/env.3_alpha_diversity.RData")
+
+#let's clean what we dont need
+rm(alpha_diversity, aov_list, aovTukey, aovTukey.e, aovTukey.r, df, endo, rhizo, merg_to_ps,
+   p_alpha_4, diversity_list, ps_list_CSS2)
+
 ```
 
 
@@ -28,7 +76,7 @@ Comparing neutral models will take several different views on different slices o
 
 # colors & treatments
 MeJA_treatment_pal <- c("#FBF2C4", "#DEA868", "#C7522B", "#9BBAA0")
-names(MeJA_treatment_pal) <- c("Control", "0.1 mM MeJA", "1 mM MeJA", "P. brassicae OS")
+names(MeJA_treatment_pal) <- c("Control", "0.1 mM MeJA", "1 mM MeJA", "Caterpillar OS")
 
 Sample_Type_pal <- c("Endosphere" = "#e7b083ff", "Rhizosphere" = "#905423ff")
 
@@ -69,7 +117,7 @@ axis_looks <- theme(axis.text.x = element_text(
 
 treatment_names <- c(
   "control" = "Control", "MeJA_0.1" = "0.1 mM \n MeJA",
-  "MeJA_1.0" = "1 mM \n MeJA", "oral_secretion" = "P. brassicae \n OS"
+  "MeJA_1.0" = "1 mM \n MeJA", "oral_secretion" = "Caterpillar \n OS"
 )
 ```
 
@@ -161,10 +209,11 @@ axis_looks <- theme(axis.text = element_text(colour = "black", size = 14)) +
     panel.grid.minor = element_blank()
   ) +
   theme(panel.border = element_rect(colour = "black", fill = NA, size = 1))
+
 ```
 
 
-# 4a.6 one model for each BO_soil treatment, using all BO_soil samples as a pool
+# 4a.6 one model for each Bole-Rhizosphere treatment, using all BO_soil samples as a pool
 
 ### 4a.6.1 make new physeq object and neutral models
 ```{r}
@@ -210,8 +259,10 @@ Neutral_plots_list_BO_soil_g <- ggarrange(Neutral_plots_list_BO_soil$control,
 # save plots
 ggsave(Neutral_plots_list_BO_soil_g,
   height = 9, width = 12,
-  file = "./R output/Figures_for_publication/NeutralModels_BO.svg"
+  file = "./Plots/04a_Neutral_models_rhizosphere/NeutralModels_BO.svg"
 )
+
+
 ```
 
 ### 4a.6.2 check metrics of BO_soil neutral models
@@ -224,6 +275,7 @@ ggsave(Neutral_plots_list_BO_soil_g,
 fitstats_listed_BO_soil <- lapply(neutral_list_BO_soil, function(x) {
   x$fitstats[c(1, 4)]
 })
+
 ```
 
 ### 4a.6.3 check distribution of the different classes across your listed phyloseq objects
@@ -231,8 +283,6 @@ fitstats_listed_BO_soil <- lapply(neutral_list_BO_soil, function(x) {
 This facilitates comparison of multiple different models
 
 ```{r}
-
-
 ## now, to quickly visualize all the fit_class predictions
 
 # lists predictions of all neutral models, keeps only the fit class and the OTU ID
@@ -240,7 +290,7 @@ predictions_listed_BO_soil <- lapply(neutral_list_BO_soil, function(x) {
   x$predictions[14]
 })
 
-# make a list of tibles, including percentage of each fit class
+# make a list of tibles, including percentage of each fit class [Supplementary Table SX]
 list_tibble <- lapply(predictions_listed_BO_soil, function(x) {
   x %>%
     group_by(fit_class) %>%
@@ -261,8 +311,7 @@ SIMPLIFY = FALSE
 )
 ```
 
-#### 4a.6.4 Add neutral fit classes of OTUs to your original phyloseq objects
-
+#### 4a.6.4 Add neutral fit classes of ASVs as metadata to your original phyloseq objects
 
 finally let's add the  fit class as a taxonomy value of the main phyloseq object Note that the same OTU bay have different fit classes in different slices of the data. beware if trying to put all fit classes into a single phyloseq object!
 
@@ -350,6 +399,8 @@ dip_result_BO <- beta_disp_plotAndTest(BO_soil_predicted_list, "MeJA_treatment")
 set.seed(5235)
 permanova_with_blocks(BO_soil_predicted_list, "MeJA_treatment + Block")
 
+
+#[MA]: Could be deleted
 # pairwise tests
 set.seed(5235)
 lapply(BO_soil_predicted_list, function(x) {
@@ -357,7 +408,13 @@ lapply(BO_soil_predicted_list, function(x) {
     dist.mat = phyloseq::distance(otu_table(x), method = "bray"),
     Factor = as.factor(as(phyloseq::sample_data(x), "data.frame")$MeJA_treatment)
   )
-})
+}) #MA: not working
+
+sample_data_df <- as(phyloseq::sample_data(BO_soil_predicted_list$Brassica_oleraceae.Soil.above), "data.frame")
+print(head(sample_data_df))
+str(sample_data_df)
+
+
 ```
 
 
@@ -383,24 +440,27 @@ venn_neutral <- function(ps_l_predictions_in_taxtable) {
 # run the custom function
 Venn_BO <- venn_neutral(ps_l_predictions_in_taxtable = ps_list_neutral_BO_soil) +
   ggtitle(label = "Above Neutral ASV overlap, B. oleraceae")
+
+##Get a vector with the ASV names 
+BO_asv_list <- lapply(ps_list_neutral_BO_soil, function(x) {
+  taxa_names(subset_taxa(x, fit_class == "Above prediction"))})
+
+#let's save this;
+saveRDS(BO_asv_list, "./R output/04a_NM_Rhizo/BO_asv_list.rds")
+
 ```
 
+[MA]In here I would be interested in those that are above-neutral in JA-inducing treatments and not in controls
 
 
-
-# 4a.7 one model for each AT_soil treatment, using all AT_soil samples as a pool
+# 4a.7 one model for each Atha-Rhizo, using all AT_soil samples as a pool
 
 ### 4a.7.1 make new physeq object and neutral models
 
 ```{r}
 
 # first, we get out list of 4 phyloseq objects and split it further according to treatment
-ps_list_treat <- lapply(ps_list_rarefied, function(x) {
-  phyloseq_sep_variable(x, variable = "MeJA_treatment")
-})
-
-
-
+ps_list_treat 
 
 ############### This is a list fot AT_soil to use later...
 # makes a list of neutral models, according the data splits of your ps_list
@@ -436,11 +496,9 @@ Neutral_plots_list_AT_soil_g <- ggarrange(Neutral_plots_list_AT_soil$control,
   ncol = 2, nrow = 2
 )
 
-# save plots
-ggsave(Neutral_plots_list_AT_soil_g,
-  height = 9, width = 12,
-  file = "./R output/Figures_for_publication/NeutralModels_AT.svg"
-)
+#check
+Neutral_plots_list_AT_soil_g
+
 ```
 
 ### 4a.7.2 check metrics of AT_soil neutral models
@@ -563,15 +621,13 @@ AT_soil_predicted_list <- subset_ps_above_neutral_below(
 )
 ```
 
-#### 4a.7.6 check stats of treatment effects on each subcommunity
+#### 4a.7.6 check stats of treatment effects on each subcommunity[SKIP]
 
 NOTE: EcoUtils::adonispair() may give an error "attempt to set 'colnames' on an object with less than two dimensions". it happens after running the function a second time. if this happens, refresh session and reload, skipping the first run.
 
 ```{r}
 # beta dispersion
 dip_result_AT <- beta_disp_plotAndTest(AT_soil_predicted_list, "MeJA_treatment")
-
-
 
 # Permanova
 set.seed(5235)
@@ -607,6 +663,19 @@ venn_neutral <- function(ps_l_predictions_in_taxtable) {
 # run the custom function
 Venn_AT <- venn_neutral(ps_l_predictions_in_taxtable = ps_list_neutral_AT_soil) +
   ggtitle(label = "Above Neutral ASV overlap, A. thaliana")
+
+#check
+Venn_AT
+
+#save df
+AT_asv_list <- lapply(ps_list_neutral_AT_soil, function(x) {
+  taxa_names(subset_taxa(x, fit_class == "Above prediction"))
+})
+
+saveRDS(AT_asv_list, "./R output/04a_NM_Rhizo/AT_asv_list.rds")
+
+
+
 ```
 
 ##### 4.7.9 Export veen diagram with both plant species
@@ -614,23 +683,16 @@ Venn_AT <- venn_neutral(ps_l_predictions_in_taxtable = ps_list_neutral_AT_soil) 
 
 export_venn <- ggarrange(Venn_AT, Venn_BO, labels = c("A", "B"))
 
+
+#[MA: SKIP]
 # save plots
-
-
-
 ggsave(export_venn,
   height = 5, width = 10,
-  file = "./R output/Figures_for_publication/NeutralModel_Veen.svg"
-)
+  file = "./Plots/04a_Neutral_models_rhizosphere/NeutralModel_Veen_BO_AT.svg")
 ```
 
 
-
-
-
-
 # 4a.8 Join neutral class partitions back together to check possible artefacts
-
 
 ```{r}
 
@@ -653,8 +715,6 @@ we should then draw X random OTUS (instead of those X selected by the neutral mo
 
 
 ### 4a.9.1 run 1000 permanovas on randomly selected OTUs - here, we take teh random otus from inside each tretment and later join them, instead of simply collecing X otus from the full table
-
-
 ```{r}
 
 # define function
@@ -734,7 +794,6 @@ memory.limit(size = 350000)
 BO_4_model_above_soil <- lapply(ps_list_neutral_BO_soil, function(x) subset_taxa(x, fit_class == "Above prediction"))
 AT_4_model_above_soil <- lapply(ps_list_neutral_AT_soil, function(x) subset_taxa(x, fit_class == "Above prediction"))
 
-
 # now, make the 100 permanovas on random sets of OTUs, using a total number of OTUs equal to the OTUs selected as above aoccurence
 permanovas_BO_100 <- thousand_permanovas_on_random_otu(
   CSS_fraction = ps_list_CSS$Brassica_oleraceae.Soil,
@@ -749,8 +808,6 @@ permanovas_AT_100 <- thousand_permanovas_on_random_otu(
 
 
 #### 4a.9.2 acess the P, F and R2 values of the 1000 permanovas for each species, then put it into a single object for both species
-
-
 
 ```{r}
 
@@ -1227,6 +1284,7 @@ heat_tree_matrix(test,
 
 
 
+
 # 4a.11 Alpha Diversity of ASVs selected by neutral models
 
 ```{r}
@@ -1267,11 +1325,6 @@ lapply(pslit_neutraly_selected, function(x) {
     labs(color = "Plant species") +
     ylab("Shannon diversity")
 })
-
-
-
-
-
 
 # calculates alpha diversity
 diversity_list <- lapply(pslit_neutraly_selected, add_diversity_to_physeq_object)

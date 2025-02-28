@@ -10,12 +10,9 @@ editor_options:
 
 # load libraries and data
 ```{r}
-source("./Code/Functions/load_libraries.R")
-load("./R output/analysis_session.RData")
+#source("./Code/Functions/load_libraries.R")
+#load("./R output/analysis_session.RData")
 ```
-
-
-
 
 ## 4b.0 Neutral models on lists of comparisons
 
@@ -73,8 +70,6 @@ treatment_names <- c(
   "MeJA_1.0" = "1 mM \n MeJA", "oral_secretion" = "P. brassicae \n OS"
 )
 ```
-
-
 
 
 MA - Changing `plot_scnm_fit` function of TyRA package to pimp the plot 
@@ -153,32 +148,13 @@ plot_sncm_fit2 <- function(spp_out = spp_out, fill = NULL, title = NULL) {
 }
 ```
 
- MA - settings for NMDS plots
-
-```{r}
-# settings for NMDS plots
-
-axis_looks <- theme(axis.text = element_text(colour = "black", size = 14)) +
-  theme(axis.title = element_text(size = 14, face = "bold")) +
-  theme(
-    panel.grid.major = element_blank(),
-    panel.grid.minor = element_blank()
-  ) +
-  theme(panel.border = element_rect(colour = "black", fill = NA, size = 1))
-```
-
-
-
 # 4b.6 one model for each BO_Root treatment, using all BO_Root samples as a pool
 
 ### 4b.6.1 make new physeq object and neutral models
 ```{r}
 
 # first, we get out list of 4 phyloseq objects and split it further according to treatment
-ps_list_treat <- lapply(ps_list_rarefied, function(x) {
-  phyloseq_sep_variable(x, variable = "MeJA_treatment")
-})
-
+ps_list_treat 
 
 
 # Now, make a list of neutral models with one model for every treatment
@@ -209,14 +185,9 @@ Neutral_plots_list_BO_Root_g <- ggarrange(Neutral_plots_list_BO_Root$control,
   Neutral_plots_list_BO_Root$MeJA_0.1,
   Neutral_plots_list_BO_Root$MeJA_1.0,
   Neutral_plots_list_BO_Root$oral_secretion, 
-  ncol = 2, nrow = 2
-)
+  ncol = 2, nrow = 2)
 
-# save plots
-ggsave(Neutral_plots_list_BO_Root_g,
-  height = 9, width = 12,
-  file = "./R output/Figures_for_publication/NeutralModels_BO_endosphere.svg"
-)
+
 ```
 
 ### 4b.6.2 check metrics of BO_Root neutral models
@@ -234,8 +205,6 @@ fitstats_listed_BO_Root <- lapply(neutral_list_BO_Root, function(x) {
 quickly visualize all the fit_class predictions
 
 ```{r}
-
-
 # lists predictions of all neutral models, keeps only the fit class and the OTU ID
 predictions_listed_BO_Root <- lapply(neutral_list_BO_Root, function(x) {
   x$predictions[14]
@@ -355,7 +324,7 @@ dip_result_BO <- beta_disp_plotAndTest(BO_Root_predicted_list, "MeJA_treatment")
 set.seed(5235)
 permanova_with_blocks(BO_Root_predicted_list, "MeJA_treatment + Block")
 
-# pairwise tests
+# pairwise tests[MA: SKIP]
 set.seed(5235)
 lapply(BO_Root_predicted_list, function(x) {
   adonis.pair(
@@ -389,6 +358,15 @@ venn_neutral <- function(ps_l_predictions_in_taxtable) {
 # run the custom function
 Venn_BO <- venn_neutral(ps_l_predictions_in_taxtable = ps_list_neutral_BO_Root) +
   ggtitle(label = "Above Neutral ASV overlap, B. oleraceae endosphere")
+
+
+#save df
+BO_asv_list.endo <- lapply(ps_list_neutral_BO_Root, function(x) {
+  taxa_names(subset_taxa(x, fit_class == "Above prediction"))
+})
+
+saveRDS(BO_asv_list.endo , "./R output/04b_NM_Endo/BO_asv_list.rds")
+
 ```
 
 
@@ -401,12 +379,7 @@ Venn_BO <- venn_neutral(ps_l_predictions_in_taxtable = ps_list_neutral_BO_Root) 
 ```{r}
 
 # first, we get out list of 4 phyloseq objects and split it further according to treatment
-ps_list_treat <- lapply(ps_list_rarefied, function(x) {
-  phyloseq_sep_variable(x, variable = "MeJA_treatment")
-})
-
-
-
+ps_list_treat 
 
 ############### This is a list fot AT_Root to use later...
 # makes a list of neutral models, according the data splits of your ps_list
@@ -442,11 +415,9 @@ Neutral_plots_list_AT_Root_g <- ggarrange(Neutral_plots_list_AT_Root$control,
   ncol = 2, nrow = 2
 )
 
-# save plots
-ggsave(Neutral_plots_list_AT_Root_g,
-  height = 9, width = 12,
-  file = "./R output/Figures_for_publication/NeutralModels_ATendosphere.svg"
-)
+#check
+Neutral_plots_list_AT_Root_g 
+
 ```
 
 ### 4b.7.2 check metrics of AT_Root neutral models
@@ -466,8 +437,6 @@ fitstats_listed_AT_Root <- lapply(neutral_list_AT_Root, function(x) {
 quickly visualize all the fit_class predictions
 
 ```{r}
-
-
 # lists predictions of all neutral models, keeps only the fit class and the OTU ID
 predictions_listed_AT_Root <- lapply(neutral_list_AT_Root, function(x) {
   x$predictions[14]
@@ -583,14 +552,12 @@ NOTE: EcoUtils::adonispair() may give an error "attempt to set 'colnames' on an 
 # beta dispersion
 dip_result_AT <- beta_disp_plotAndTest(AT_Root_predicted_list, "MeJA_treatment")
 
-
-
 # Permanova
 set.seed(5235)
 permanova_with_blocks(AT_Root_predicted_list, "MeJA_treatment + Block")
 
 
-# pairwise tests
+# pairwise tests [MA: SKIP]
 set.seed(5235)
 lapply(AT_Root_predicted_list, function(x) {
   adonis.pair(
@@ -599,9 +566,6 @@ lapply(AT_Root_predicted_list, function(x) {
   )
 })
 ```
-
-
-
 
 
 ####  4b.7.8 Make Venn diagram with ASV overlaps 
@@ -622,6 +586,15 @@ venn_neutral <- function(ps_l_predictions_in_taxtable) {
 # run the custom function
 Venn_AT <- venn_neutral(ps_l_predictions_in_taxtable = ps_list_neutral_AT_Root) +
   ggtitle(label = "Above Neutral ASV overlap, A. thaliana")
+
+
+#save df
+AT_asv_list.endo <- lapply(ps_list_neutral_AT_Root, function(x) {
+  taxa_names(subset_taxa(x, fit_class == "Above prediction"))
+})
+
+saveRDS(AT_asv_list.endo, "./R output/04b_NM_Endo/AT_asv_list.rds")
+
 ```
 
 
@@ -632,22 +605,83 @@ Venn_AT <- venn_neutral(ps_l_predictions_in_taxtable = ps_list_neutral_AT_Root) 
 export_venn <- ggarrange(Venn_AT, Venn_BO, labels = c("A", "B"))
 
 # save plots
-
-
-
 ggsave(export_venn,
   height = 5, width = 10,
-  file = "./R output/Figures_for_publication/NeutralModel_Veenendosphere.svg"
+  file = "./Plots/04b_Neutral_models_rhizosphere/NeutralModel_Veen_BO_AT_endosphere.svg"
 )
 ```
 
 
+#Save session NM
 
+First save the output in rds objects 
+```{r}
+
+predictions_listed_AT_Root #df with all ASVs and their classification
+AT_Root_predicted_list #ps classified as above-neutral and below
+neutral_list_AT_Root
+
+#make a list 
+NM_AT_Root <- list(predictions_listed_AT_Root =predictions_listed_AT_Root,
+                   AT_Root_predicted_list = AT_Root_predicted_list,
+                   neutral_list_AT_Root=neutral_list_AT_Root)
+
+#save it 
+saveRDS(NM_AT_Root, "./R output/04b_NM_Endo/NM_AT_Root.rds")
+
+
+predictions_listed_BO_Root
+BO_Root_predicted_list
+neutral_list_BO_Root
+
+#make a list 
+NM_BO_Root <- list(predictions_listed_BO_Root =predictions_listed_BO_Root,
+                   BO_Root_predicted_list = BO_Root_predicted_list,
+                   neutral_list_BO_Root = neutral_list_BO_Root)
+
+#save it 
+saveRDS(NM_BO_Root, "./R output/04b_NM_Endo/NM_BO_Root.rds")
+
+
+
+predictions_listed_AT_soil
+AT_soil_predicted_list
+neutral_list_AT_soil
+
+#make a list 
+NM_AT_Rhizo <- list(predictions_listed_AT_soil =predictions_listed_AT_soil,
+                   AT_soil_predicted_list = AT_soil_predicted_list,
+                   neutral_list_AT_soil = neutral_list_AT_soil)
+
+#save it 
+saveRDS(NM_AT_Rhizo, "./R output/04a_NM_Rhizo/NM_AT_Rhizo.rds")
+
+predictions_listed_BO_soil
+BO_soil_predicted_list
+neutral_list_BO_soil
+
+#make a list 
+NM_BO_Rhizo <- list(predictions_listed_BO_soil =predictions_listed_BO_soil,
+                   BO_soil_predicted_list = BO_soil_predicted_list,
+                   neutral_list_BO_soil = neutral_list_BO_soil)
+
+#save it 
+saveRDS(NM_BO_Rhizo, "./R output/04a_NM_Rhizo/NM_BO_Rhizo.rds")
+
+#save space
+rm(NM_AT_Rhizo, NM_AT_Root, NM_BO_Rhizo, NM_BO_Root)
+
+```
+
+
+```{r}
+
+save.image("./R output/env.4_neutral_models_rhizo_endo.RData")
+
+```
 
 
 # 4b.8 Join neutral class partitions back together to check possible artefacts
-
-
 ```{r}
 
 
@@ -1057,10 +1091,9 @@ ggsave(histogram_100_permanovas,
 )
 ```
 
-# 4b.10 plot a heat tree of above_expected asvs
+# 4b.10 plot a heat tree of above_expected asvs[SKIP]
 
 ```{r}
-
 
 # new ps object, based on rarefied data
 neutral_heat_tree_BO <- lapply(ps_list_neutral_BO_Root, function(x) subset_taxa(x, fit_class == "Above prediction"))
