@@ -32,6 +32,7 @@ library("decontam")
 library("metagenomeSeq")
 library("Biostrings")
 library("mikropml")
+library(EcolUtils)
 
 #Visuals
 library("ggplot2")
@@ -441,7 +442,7 @@ perm_by4 <- lapply(perm_by4, function(perm){as.data.frame(perm)})
 # 2.5 - Save session
 ```{r}
 
-save.image("./R output/analysis_session.RData")
+save.image("./R output/env.2_beta_diversity.RData")
 
 ```
 

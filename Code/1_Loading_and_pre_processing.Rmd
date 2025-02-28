@@ -311,6 +311,7 @@ ps_list_CSS <- phyloseq_sep_variable(physeq_filtered_CSS, variable = c("Plant_sp
 
 gc() # garbage collection
 ```
+
 #### 1.4c list of different normalization options
 
 ```{r}
