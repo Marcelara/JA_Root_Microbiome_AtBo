@@ -197,21 +197,6 @@ plot_sncm_fit2 <- function(spp_out = spp_out, fill = NULL, title = NULL) {
 }
 ```
 
-MA - settings for NMDS plots
-
-```{r}
-# settings for NMDS plots
-
-axis_looks <- theme(axis.text = element_text(colour = "black", size = 14)) +
-  theme(axis.title = element_text(size = 14, face = "bold")) +
-  theme(
-    panel.grid.major = element_blank(),
-    panel.grid.minor = element_blank()
-  ) +
-  theme(panel.border = element_rect(colour = "black", fill = NA, size = 1))
-
-```
-
 
 # 4a.6 one model for each Bole-Rhizosphere treatment, using all BO_soil samples as a pool
 
