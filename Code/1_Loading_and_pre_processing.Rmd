@@ -336,5 +336,24 @@ Save R objects
 
 ```{r}
 
+saveRDS(normalization_listed,
+        "./R output/01_phyloseq_objects/normalization_listed.rds") #list with CSS, rarefied and non-rarefied
+saveRDS(physeq_filtered_rarefied,
+        "./R output/01_phyloseq_objects/physeq_filtered_rarefied.rds") #full rarefied
+saveRDS(physeq_filtered,
+        "./R output/01_phyloseq_objects/physeq_filtered.rds") #full non-rarefied
+saveRDS(physeq_filtered_CSS,
+        "./R output/01_phyloseq_objects/physeq_filtered_CSS.rds") #full CSS-normalized
+saveRDS(ps_list_nonraref,
+        "./R output/01_phyloseq_objects/ps_list_nonraref.rds") #non rarefied split by Sp and Root (4)
+saveRDS(ps_list_rarefied,
+        "./R output/01_phyloseq_objects/ps_list_rarefied.rds") #rarefied split by Sp and Root (4)
+
+#save all just in case 
 save.image("./R output/env.1_Loading_and_pre_processing.RData")
+
+
+
+
+
 ```
