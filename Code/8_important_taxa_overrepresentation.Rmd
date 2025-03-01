@@ -8,7 +8,7 @@ editor_options:
 ---
 
 # load libraries and data
-# load libraries and data
+
 Skip if you started in the previous script 6 and just load the new packages needed for this script
 ```{r}
 #Set working directory to project directory 
@@ -44,7 +44,7 @@ library("car")  # for Levene's test
 
 #New in this script
 library(metacoder)
-
+library(ggar)
 
 ```
 
@@ -55,6 +55,11 @@ Skip
 #load("./R output/analysis_session.RData")
 ```
 
+Clean
+```{r}
+rm(ps_list_CSS, pslist_sp_CSS, pslist_root_soil_CSS, pslist_root_soil_rarefied, pslist_sp_rarefied,
+   normalization_listed2)
+```
 
 
 # 8.0 - important taxa overrepresentation
@@ -211,6 +216,8 @@ RF_ASV_list
 ```
 
 ```{r}
+
+#combine ASVs
 combined_ASV_list <- list(
   Arabidopsis_thaliana.Root = unique(c(DA_ASV_list$Arabidopsis_thaliana.Root,
                                        NA_ASV_list$Arabidopsis_thaliana.Root,
@@ -238,6 +245,475 @@ ps_imp_taxa_l <-mapply(function (z,y)
 
 ```
 
+
+#Summary figure
+```{r}
+
+# Example for At Root
+combined_asvs_at_root <- unique(c(
+  DA_ASV_list$Arabidopsis_thaliana.Root,
+  NA_ASV_list$Arabidopsis_thaliana.Root,
+  RF_ASV_list$Arabidopsis_thaliana.Root
+))
+
+#subset ps
+ps_at_root_important <- prune_taxa(combined_asvs_at_root, ps_list_rarefied$Arabidopsis_thaliana.Root)
+
+#Extract taxonomy and abundance
+tax_table_at_root <- as.data.frame(tax_table(ps_at_root_important)) %>%
+  rownames_to_column(var = "ASV")
+
+# Summarize by Family (you could also do Phylum or Genus)
+family_abundance <- as.data.frame(otu_table(ps_at_root_important)) %>%
+  rownames_to_column(var = "ASV") %>%
+  pivot_longer(-ASV, names_to = "Sample", values_to = "Abundance") %>%
+  left_join(tax_table_at_root, by = "ASV") %>%
+  group_by(Family) %>%
+  summarise(TotalAbundance = sum(Abundance), .groups = "drop")
+
+# Remove prefixes if needed (f__, p__, etc.)
+family_abundance$Family <- gsub("^f__", "", family_abundance$Family)
+
+top5_families <- family_abundance %>%
+  arrange(desc(TotalAbundance)) %>%
+  head(6) %>%
+  pull(Family)
+
+# Add a new column to classify families as "Top 5" or "Other"
+family_abundance.i <- family_abundance %>%
+  mutate(FamilyGroup = ifelse(Family %in% top5_families, Family, "Other"))
+
+# Pick colors for top 5 (can be customized) + gray for "Other"
+top5_colors <- c(RColorBrewer::brewer.pal(6, "Set2"), "gray70")
+top5_colors  <- c("#66C2A5", "#FC8D62", "#8DA0CB", "#E78AC3", "#A6D854", "#FFD92F", "gray70") 
+
+# Make sure colors match the levels
+family_abundance.i$FamilyGroup <- factor(family_abundance.i$FamilyGroup, levels = c(top5_families, "Other"))
+
+a.r.i <- ggplot(family_abundance, aes(x = "", y = TotalAbundance, fill = FamilyGroup)) +
+  geom_bar(stat = "identity", width = 1, color = "white") +
+  coord_polar(theta = "y") +
+  theme_void() +
+  scale_fill_manual(values = top5_colors) +
+  labs(fill = "Family", title = "Taxonomic Composition - Top 5 Families (At Root)")
+
+
+```
+
+
+```{r}
+
+
+# Extract phyloseq object for A. thaliana root
+ps_atha_root <- ps_list_rarefied$Arabidopsis_thaliana.Root
+
+# Collapse to family level
+ps_family <- tax_glom(ps_atha_root, taxrank = "Family")
+
+# Get family-level abundances
+family_abundance <- as.data.frame(otu_table(ps_family)) %>%
+  rownames_to_column(var = "ASV") %>%
+  left_join(as.data.frame(tax_table(ps_family)) %>%
+              rownames_to_column(var = "ASV"), by = "ASV") %>%
+  group_by(Family) %>%
+  summarise(TotalAbundance = sum(across(where(is.numeric)))) %>%
+  filter(!is.na(Family), Family != "f__")
+
+# Clean up Family names (remove f__)
+family_abundance <- family_abundance %>%
+  mutate(Family = gsub("^f__", "", Family))
+
+#top5_families <- family_abundance %>%
+#  arrange(desc(TotalAbundance)) %>%
+#  head(6) %>%
+#  pull(Family)
+
+# Assign "Other" to everything else
+family_abundance <- family_abundance %>%
+  mutate(FamilyGroup = ifelse(Family %in% top5_families, Family, "Other")) #keeping the same families as the important 
+
+# Colors for top 5 + gray for others
+top5_colors 
+
+# Make sure FamilyGroup is a factor for ordering in plot
+family_abundance$FamilyGroup <- factor(family_abundance$FamilyGroup, levels = c(top5_families, "Other"))
+
+a.r.full <- ggplot(family_abundance, aes(x = "", y = TotalAbundance, fill = FamilyGroup)) +
+  geom_bar(stat = "identity", width = 1, color = "white") +
+  coord_polar(theta = "y") +
+  theme_void() +
+  scale_fill_manual(values = top5_colors) +
+  labs(fill = "Family", title = "A. thaliana Root - Full Taxonomic Composition")
+
+ggarrange(a.r.i , a.r.full)
+
+
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+#Summary2
+```{r}
+
+#First get top families 
+get_top_families <- function(ps) {
+  
+  # Collapse to family level
+  ps_family <- tax_glom(ps, taxrank = "Family")
+  
+  # Calculate abundance per family
+  family_abundance <- as.data.frame(otu_table(ps_family)) %>%
+    rownames_to_column(var = "ASV") %>%
+    left_join(as.data.frame(tax_table(ps_family)) %>%
+                rownames_to_column(var = "ASV"), by = "ASV") %>%
+    group_by(Family) %>%
+    summarise(TotalAbundance = sum(across(where(is.numeric))), .groups = "drop") %>%
+    filter(!is.na(Family), Family != "f__")
+
+  # Clean up Family names (remove f__)
+  family_abundance <- family_abundance %>%
+    mutate(Family = gsub("^f__", "", Family))
+
+  # Extract the top 5 families
+  top6_families <- family_abundance %>%
+    arrange(desc(TotalAbundance)) %>%
+    head(10) %>%
+    pull(Family)
+  
+  return(top6_families)
+}
+
+top_families_list <- list(
+  Arabidopsis_thaliana.Root = get_top_families(ps_list_rarefied$Arabidopsis_thaliana.Root),
+  Arabidopsis_thaliana.Soil = get_top_families(ps_list_rarefied$Arabidopsis_thaliana.Soil),
+  Brassica_oleraceae.Root = get_top_families(ps_list_rarefied$Brassica_oleraceae.Root),
+  Brassica_oleraceae.Soil = get_top_families(ps_list_rarefied$Brassica_oleraceae.Soil))
+
+# Check results
+top_families_list
+
+unique_top_families <- unique(unlist(top_families_list))
+
+# Check
+print(unique_top_families)
+
+```
+
+```{r}
+
+family_colors <- setNames(
+  RColorBrewer::brewer.pal(length(unique_top_families), "Set3"),
+  unique_top_families
+)
+
+# Optional: Add gray for "Other" if you want
+family_colors <- c(family_colors, Other = "gray70")
+
+# Check palette
+print(family_colors)
+
+```
+
+
+```{r}
+
+
+plot_taxonomic_pies <- function(ps_list, 
+                                 da_list, na_list, rf_list, 
+                                 species, compartment, 
+                                 top_families,
+                                 top_n = 6) {
+  
+  # Construct sub-community name
+  subcommunity_name <- paste(species, compartment, sep = ".")
+  
+  # Extract phyloseq object
+  ps_full <- ps_list[[subcommunity_name]]
+
+  # Combine important ASVs from all 3 methods (DA, NA, RF)
+  combined_asvs <- unique(c(
+    da_list[[subcommunity_name]],
+    na_list[[subcommunity_name]],
+    rf_list[[subcommunity_name]]
+  ))
+
+  # Subset phyloseq object to important ASVs
+  ps_important <- prune_taxa(combined_asvs, ps_full)
+
+  # Helper function to calculate family abundances
+  get_family_abundance <- function(ps) {
+    tax_df <- as.data.frame(tax_table(ps)) %>%
+      rownames_to_column(var = "ASV")
+    
+    abundance_df <- as.data.frame(otu_table(ps)) %>%
+      rownames_to_column(var = "ASV") %>%
+      pivot_longer(-ASV, names_to = "Sample", values_to = "Abundance") %>%
+      left_join(tax_df, by = "ASV") %>%
+      group_by(Family) %>%
+      summarise(TotalAbundance = sum(Abundance), .groups = "drop") %>%
+      mutate(Family = gsub("^f__", "", Family)) # Remove "f__"
+    
+    return(abundance_df)
+  }
+  
+  # Get family abundances for important subset
+  family_abundance_important <- get_family_abundance(ps_important)
+
+  # Identify top families in important subset
+  #top_families <- family_abundance_important %>%
+  #  arrange(desc(TotalAbundance)) %>%
+  #  head(top_n) %>%
+  #  pull(Family)
+
+  # Classify into top families or "Other"
+  family_abundance_important <- family_abundance_important %>%
+    mutate(FamilyGroup = ifelse(Family %in% top_families, Family, "Other"))
+
+  # Colors for top families + "Other" (gray)
+  #family_colors <- c(RColorBrewer::brewer.pal(top_n, "Set2"), "gray70")
+  #names(family_colors) <- c(top_families, "Other")
+
+  # Plot for important subset
+  p_important <- ggplot(family_abundance_important, aes(x = "", y = TotalAbundance, fill = FamilyGroup)) +
+    geom_bar(stat = "identity", width = 1, color = "white") +
+    coord_polar(theta = "y") +
+    theme_void() +
+    scale_fill_manual(values = family_colors) +
+    labs(fill = "Family", title = paste(species, compartment, "- Important Taxa"))
+
+  # Get family abundances for full dataset (full community)
+  ps_family <- tax_glom(ps_full, taxrank = "Family")
+
+  family_abundance_full <- as.data.frame(otu_table(ps_family)) %>%
+    rownames_to_column(var = "ASV") %>%
+    left_join(as.data.frame(tax_table(ps_family)) %>%
+                rownames_to_column(var = "ASV"), by = "ASV") %>%
+    group_by(Family) %>%
+    summarise(TotalAbundance = sum(across(where(is.numeric)))) %>%
+    filter(!is.na(Family), Family != "f__") %>%
+    mutate(Family = gsub("^f__", "", Family))
+
+  # Apply same top families to full community (for consistency)
+  family_abundance_full <- family_abundance_full %>%
+    mutate(FamilyGroup = ifelse(Family %in% top_families, Family, "Other"))
+
+  # Plot for full community
+  p_full <- ggplot(family_abundance_full, aes(x = "", y = TotalAbundance, fill = FamilyGroup)) +
+    geom_bar(stat = "identity", width = 1, color = "white") +
+    coord_polar(theta = "y") +
+    theme_void() +
+    scale_fill_manual(values = family_colors) +
+    labs(fill = "Family", title = paste(species, compartment, "- Full Taxa"))
+
+  # Combine both plots into a single figure
+  combined_plot <- ggarrange(p_important, p_full, ncol = 2, common.legend = TRUE, legend = "right")
+  
+  return(combined_plot)
+}
+
+#example with A.tha-Root
+plot_taxonomic_pies(ps_list_rarefied, DA_ASV_list, NA_ASV_list, RF_ASV_list, 
+                    species = "Arabidopsis_thaliana", 
+                    compartment = "Root", 
+                    top_families= unique_top_families,
+                    top_n = 6)
+
+#Run for all
+plots <- list(
+  At_Root = plot_taxonomic_pies(ps_list_rarefied, DA_ASV_list, NA_ASV_list, RF_ASV_list,
+                                "Arabidopsis_thaliana", "Root", unique_top_families ),
+  At_Soil = plot_taxonomic_pies(ps_list_rarefied, DA_ASV_list, NA_ASV_list, RF_ASV_list,
+                                "Arabidopsis_thaliana", "Soil", unique_top_families ),
+  Bo_Root = plot_taxonomic_pies(ps_list_rarefied, DA_ASV_list, NA_ASV_list, RF_ASV_list,
+                                "Brassica_oleraceae", "Root", unique_top_families ),
+  Bo_Soil = plot_taxonomic_pies(ps_list_rarefied, DA_ASV_list, NA_ASV_list, RF_ASV_list,
+                                "Brassica_oleraceae", "Soil", unique_top_families )
+)
+
+# View one for example
+plots$At_Root
+plots$At_Soil
+plots$Bo_Root
+plots$Bo_Soil
+
+```
+Nice! now the only problem is that the top 6 families are different in between compartments, sot they get a different color code. I would like to compare them across the 4 subcommunities. Can I get a list of which are the top 6 in each sub-compartment and then get the unique names across the 4? --> Solved
+
+Think about doing it by Order, make upsetR plots, make figure for DA, make pie chart for full community. 
+Think about doing it like stacked Bars instead of pies 
+First of all, re-read results and discussion.
+
+#UpsetR plots
+```{r}
+
+library(UpSetR)
+library(ComplexUpset)
+library(tibble)
+
+
+#call function 
+#make_upset_plot_complex <- function(da_list, na_list, rf_list, species, compartment) {
+  subcommunity_name <- paste(species, compartment, sep = ".")
+
+  # Safety check
+  if (!(subcommunity_name %in% names(da_list) &&
+        subcommunity_name %in% names(na_list) &&
+        subcommunity_name %in% names(rf_list))) {
+    stop(paste0("Subcommunity '", subcommunity_name, "' not found in one or more lists"))
+  }
+
+  # Get ASVs per method
+  da_asvs <- da_list[[subcommunity_name]]
+  na_asvs <- na_list[[subcommunity_name]]
+  rf_asvs <- rf_list[[subcommunity_name]]
+
+  # Combine all unique ASVs across methods
+  all_asvs <- unique(c(da_asvs, na_asvs, rf_asvs))
+
+  # Build tidy presence/absence tibble
+  upset_data <- tibble(
+    ASV = all_asvs,
+    DA = ASV %in% da_asvs,
+    NetA = ASV %in% na_asvs,
+    RF = ASV %in% rf_asvs
+  )
+
+  # Generate UpSet plot using ComplexUpset
+  upset_plot <- ComplexUpset::upset(
+    upset_data,
+    intersect = c("DA", "NetA", "RF"),
+    name = "Method",
+    width_ratio = 0.25,
+    sort_sets = FALSE
+  ) +
+    labs(title = paste(species, compartment, "- ASV Overlap"))
+   
+
+  return(upset_plot)
+}
+
+#other function adding a Dummy variable with value of 85, so all axis are the same in between plots.
+make_upset_plot_complexDummy <- function(da_list, na_list, rf_list, species, compartment) {
+  subcommunity_name <- paste(species, compartment, sep = ".")
+
+  # Safety check
+  if (!(subcommunity_name %in% names(da_list) &&
+        subcommunity_name %in% names(na_list) &&
+        subcommunity_name %in% names(rf_list))) {
+    stop(paste0("Subcommunity '", subcommunity_name, "' not found in one or more lists"))
+  }
+
+  # Get ASVs per method
+  da_asvs <- da_list[[subcommunity_name]]
+  na_asvs <- na_list[[subcommunity_name]]
+  rf_asvs <- rf_list[[subcommunity_name]]
+
+  # Combine all unique ASVs across methods
+  all_asvs <- unique(c(da_asvs, na_asvs, rf_asvs))
+
+  # Build tidy presence/absence tibble
+  upset_data <- tibble(
+    ASV = all_asvs,
+    DA = ASV %in% da_asvs,
+    NetA = ASV %in% na_asvs,
+    RF = ASV %in% rf_asvs
+  )
+
+  # Add dummy rows to force the y-axis to go up to 85
+  dummy_data <- tibble(
+    ASV = paste0("dummy_", 1:85),  # 85 dummy ASVs (1 per "bar count")
+    DA = FALSE, NetA = FALSE, RF = FALSE  # Not present in any method
+  )
+
+  upset_data <- bind_rows(upset_data, dummy_data)
+
+  # Generate UpSet plot using ComplexUpset
+  upset_plot <- ComplexUpset::upset(
+    upset_data,
+    intersect = c("DA", "NetA", "RF"),
+    name = "Method",
+    width_ratio = 0.25,
+    sort_sets = FALSE
+  ) +
+    labs(title = paste(species, compartment, "- ASV Overlap"))
+
+  return(upset_plot)
+}
+
+
+#plot it
+upset_AtRoot <- make_upset_plot_complexDummy(DA_ASV_list, NA_ASV_list, RF_ASV_list, 
+                        species = "Arabidopsis_thaliana", 
+                        compartment = "Root")
+
+
+upset_AtSoil <- make_upset_plot_complexDummy(DA_ASV_list, NA_ASV_list, RF_ASV_list, 
+                        species = "Arabidopsis_thaliana", 
+                        compartment = "Soil")
+
+
+upset_BoRoot <- make_upset_plot_complexDummy(DA_ASV_list, NA_ASV_list, RF_ASV_list, 
+                        species = "Brassica_oleraceae", 
+                        compartment = "Root")
+
+upset_BoSoil <- make_upset_plot_complexDummy(DA_ASV_list, NA_ASV_list, RF_ASV_list, 
+                        species = "Brassica_oleraceae", 
+                        compartment = "Soil")
+
+
+ggarrange(upset_AtRoot, upset_BoRoot, upset_AtSoil, upset_BoSoil, nrow=2, ncol=2)
+
+#save plot
+mapply(function(x)
+  ggsave(
+  plot = last_plot(),
+  filename =x,
+  path = "./Plots/08_important_taxa",
+  scale = 2,
+  width = 1200,
+  height = 1100,
+  units = "px",
+  dpi = 300),
+x=c("upset.svg","upset.png"))
+
+
+```
+
+
+```{r}
+library(ggplot2)
+
+df <- tibble(
+  Species = rep(c("A. thaliana", "B. oleracea"), each = 2),
+  Compartment = rep(c("Endosphere", "Rhizosphere"), times = 2),
+  RF = c(11, 7, 17, 6),
+  NeA = c(7, 28, 3, 41),
+  DA = c(81, 11, 29, 7)
+) %>%
+  pivot_longer(cols = RF:DA, names_to = "Method", values_to = "Count")
+
+ggplot(df, aes(x = Compartment, y = Count, fill = Method)) +
+  geom_bar(stat = "identity", position = "stack") +
+  facet_wrap(~Species, scales = "free_x") +
+  scale_fill_manual(values = c("RF" = "#66C2A5", "NeA" = "#FC8D62", "DA" = "#8DA0CB")) +
+  labs(y = "Number of ASVs", fill = "Method") +
+  theme_minimal()
+
+
+```
 
 
 # 8.2 - prepare data and calculate proportions with fisher's exact test
