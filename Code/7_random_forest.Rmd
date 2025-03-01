@@ -50,13 +50,6 @@ library("randomForest")  # for random forest
 
 ```
 
-[SKIP if coming from script 6]
-```{r}
-#source("./Code/Functions/load_libraries.R")
-#load("./R output/analysis_session.RData")
-```
-
-
 # 7.0 - Random forest
 I've used this tutorial https://www.andreaperlato.com/mlpost/feature-selection-using-boruta-algorithm/
 you can also conside rthis: https://www.analyticsvidhya.com/blog/2016/03/select-important-variables-boruta-package/
@@ -485,14 +478,74 @@ x=c("RF_important_ASVs.svg","RF_important_ASVs.png"))
   
 ```
 
-
-
-
-
-# 7.8 - overwrite saved session[SKIP]
 ```{r}
+#check mean importance
+full_mean_importance <- read.csv("./R output/07_random_forest/full_mean_importance_data.csv")
 
-save.image("./R output/analysis_session.RData")
+unique(full_mean_importance$Family) #20
+
+#re-order some factors
+library(forcats)
+
+# Step 1: Count ASVs per Phylum
+phylum_order <- full_mean_importance %>%
+  dplyr::count(Phylum) %>%
+  arrange(desc(n)) %>%
+  pull(Phylum)
+
+# Step 2: Order Phylum by number of ASVs and Family within Phylum (alphabetical within each phylum)
+full_mean_importance <- full_mean_importance %>%
+  mutate(Phylum = factor(Phylum, levels = phylum_order)) %>%
+  arrange(Phylum, Family) %>%
+  mutate(Family = factor(Family, levels = unique(Family)))  # Preserve the order in Family
+
+#plot it
+ggplot(full_mean_importance ,
+       aes(x = Family, y = Mean_importance)) +
+  geom_point(size = 4, alpha = 0.6) +
+  labs(y = "Mean importance") +
+  #scale_color_manual(values = color_JAtreatments) +
+  #geom_hline(yintercept = 0, linetype = "dashed", color = "black") +
+  facet_grid(Compartment + Species ~ Order, scales = "free_x", space = "free_x") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, size = 9, face = "bold"))+
+  theme(legend.position = "top")
+
+
+#plot frequencies
+asv_counts <- full_mean_importance %>%
+  dplyr::count(Phylum, Order, Family, Species, Compartment) %>%
+  dplyr::rename(Number_of_ASVs = n)
+
+#arrange by numer of ASVs per phylum
+Order_order <- asv_counts %>%
+  dplyr::count(Order) %>%
+  arrange(desc(n)) %>%
+  pull(Order)
+
+asv_counts <- asv_counts %>%
+  mutate(Order = factor(Order, levels = Order_order)) %>%
+  arrange(Order, Family) %>%
+  mutate(Family = factor(Family, levels = unique(Family)))  # Preserve the order in Family
+
+ggplot(asv_counts, aes(x = Family, y = Number_of_ASVs, fill = Compartment)) +
+  geom_bar(stat = "identity", position = position_dodge()) +
+  facet_grid(Species ~ Order, scales = "free_x", space = "free_x") +
+  labs(y = "Number of ASVs", x = "Family") +
+  scale_fill_manual(values=color_compartment)+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, size = 8))
+
+
+mapply(function(x)
+  ggsave(
+  plot = last_plot(),
+  filename =x,
+  path = "./Plots/07_random_forest",
+  scale = 1.8,
+  width = 2000,
+  height = 1000,
+  units = "px",
+  dpi = 300),
+x=c("frequencies.svg","frequencies.png"))
 
 ```
 
