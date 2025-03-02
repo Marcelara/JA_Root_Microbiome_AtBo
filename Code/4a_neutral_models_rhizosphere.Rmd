@@ -241,12 +241,8 @@ Neutral_plots_list_BO_soil_g <- ggarrange(Neutral_plots_list_BO_soil$control,
   ncol = 2, nrow = 2
 )
 
-# save plots
-ggsave(Neutral_plots_list_BO_soil_g,
-  height = 9, width = 12,
-  file = "./Plots/04a_Neutral_models_rhizosphere/NeutralModels_BO.svg"
-)
-
+#check
+Neutral_plots_list_BO_soil_g
 
 ```
 

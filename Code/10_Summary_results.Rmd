@@ -1,0 +1,131 @@
+---
+title: "Untitled"
+author: "Marcela Aragon"
+date: "2025-03-01"
+output: html_document
+---
+
+Clean up
+
+```{r}
+rm(ps_rf_list, ps_imp_taxa_l, ps_list_treat, plots, plot_Endo, plot_Rhizo, plot, ps_family, ps_at_root_important)
+gc()
+```
+
+#Loading data
+
+```{r}
+
+combined_da #results differential abundance 
+central_keystone_asv_df #results network analysis 
+important_data_list #results random forest
+
+#Vectors with just names of ASVs
+DA_ASV_list
+NA_ASV_list
+RF_ASV_list
+
+#let's save it into a list 
+important_ASV_list <- list(DA_ASV_list = DA_ASV_list, 
+                           NA_ASV_list = NA_ASV_list,
+                           RF_ASV_list = RF_ASV_list)
+
+saveRDS(important_ASV_list, "./R output/10_summary_results/important_ASV_list.rds")
+
+```
+
+```{r}
+
+
+# 1. DA
+da_df <- DA_ASV_list %>%
+  enframe(name = "Group", value = "ASV") %>% 
+  unnest(ASV) %>% 
+  separate(Group, into = c("Species", "Compartment"), sep = "\\.") %>%
+  mutate(Method = "DA")
+
+# 2. Network Analysis
+na_df <- NA_ASV_list %>%
+  enframe(name = "Group", value = "ASV") %>% 
+  unnest(ASV) %>% 
+  separate(Group, into = c("Species", "Compartment"), sep = "\\.") %>%
+  mutate(Method = "NetA")
+
+# 3. Random Forest
+rf_df <- RF_ASV_list %>%
+  enframe(name = "Group", value = "ASV") %>% 
+  unnest(ASV) %>% 
+  separate(Group, into = c("Species", "Compartment"), sep = "\\.") %>%
+  mutate(Method = "RF")
+
+#merge into a single df 
+full_important_df <- rbind(da_df , na_df, rf_df)
+
+full_important_df <- full_important_df %>%  relocate(ASV) %>% dplyr::rename(Plant_Species= Species)
+
+#check
+unique(full_important_df$ASV) #224 unique ASVs, okay
+
+#make it wide 
+library(tidyr)
+
+full_important_df_wide <- full_important_df %>%
+  mutate(Presence = TRUE) %>%  # Add a flag to fill in the wide table
+  tidyr::unite("Group", Plant_Species, Compartment, Method, sep = "_") %>%  # Combine Species, Compartment, Method into 1 col
+  tidyr::pivot_wider(names_from = Group, values_from = Presence, values_fill = FALSE)
+
+colnames(full_important_df_wide) #check colnames, too long
+
+colnames(full_important_df_wide) <- colnames(full_important_df_wide) %>%
+  str_replace_all("Arabidopsis_thaliana", "AT") %>%
+  str_replace_all("Brassica_oleraceae", "BO")
+
+# Check the result
+colnames(full_important_df_wide)
+
+#check those that are present in more than one combination
+full_important_df_wide %>%
+  rowwise() %>%
+  mutate(Presence_Count = sum(c_across(starts_with("AT_") | starts_with("BO_")))) %>%
+  ungroup() %>%
+  filter(Presence_Count >1) %>%
+  as.data.frame()
+
+```
+
+Add taxonomy table
+
+```{r}
+
+physeq_filtered <- readRDS("./R output/01_phyloseq_objects/physeq_filtered.rds") #full ps object 
+tax_table_df <- data.frame(tax_table(physeq_filtered))
+
+#let's clean it up
+head(tax_table_df)
+
+# Columns that need cleaning
+taxonomy_cols <- c("Domain", "Phylum", "Class", "Order", "Family", "Genus", "Species")
+
+# Remove prefixes (e.g., "d__", "p__", etc.) from each taxonomy column
+tax_table_df_cleaned <- tax_table_df %>%
+  mutate(across(all_of(taxonomy_cols), ~str_remove(.x, "^[a-z]__")))%>%
+  rownames_to_column("ASV")
+
+#join df's
+
+#long df 
+full_important_df_tax <- left_join(full_important_df, tax_table_df_cleaned, by="ASV")
+head(full_important_df_tax)
+
+#wide df 
+full_important_df_wide <- left_join(full_important_df, tax_table_df_cleaned, by="ASV")
+
+#save them
+write.csv(full_important_df_tax, "./R output/10_summary_results/important_ASVs_with_taxonomy_long.csv")
+write.csv(full_important_df_wide , "./R output/10_summary_results/important_ASVs_with_taxonomy_wide.csv")
+
+#clean up
+rm(physeq_filtered)
+```
+
+maybe later think to add for those of DA, whether they come from meja 0.1, 1 or OS, as well for RF
