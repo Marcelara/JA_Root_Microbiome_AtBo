@@ -22,6 +22,7 @@ library("tidyr")
 library("ggrepel")  # to avoid legends overlapping in your plot
 library("ggpubr")
 library("purrr")  # has map() to select table elements
+library(readr) #to handle csv's
 
 #Microbiome
 library("vegan")  # for several essential statistical tests
@@ -49,6 +50,28 @@ library("randomForest")  # for random forest
 
 
 ```
+
+##Settings for plots
+##Settings for plots
+```{r}
+#Set plots theme
+ggplot2::theme_set(theme_bw())
+
+# Set default axis looks
+axis_looks <- theme(axis.text.x = element_text(colour = "black", size = 9,
+                                               face = "bold", angle=0, hjust=0.5))+ #text in X
+  theme(axis.text.y = element_text(colour = "black", size = 11, face = "bold"))+ #text in y
+  theme(axis.title=element_text(size=11, face = "bold"))+ #all texts
+  theme(axis.title.y = element_text(margin = ggplot2::margin(t = 0, r = 10, b = 0, l = 0)))+
+  theme(panel.grid.major = element_blank(), #no grid
+        panel.grid.minor = element_blank()) #no grid
+
+#Set colors
+color_treatments <- c("#D6D6D6", "#E6C37A", "#A65A2A", "#8BAE91") #"Control", "MeJA 0.1mM", "MeJA 1mM", "P. brassicae OS"
+color_species <- c("#5A8F8F", "#2F6B3A") #at & bo, respectively
+color_compartment <- c("#B28F45", "#846475") #endo & rhizo, respectively
+```
+
 
 # 7.0 - Random forest
 I've used this tutorial https://www.andreaperlato.com/mlpost/feature-selection-using-boruta-algorithm/
@@ -278,6 +301,8 @@ ggsave(plot_rf,
 #Import data
 ```{r}
 
+#load ps object
+ps_list_rarefied <- readRDS("./R output/01_phyloseq_objects/ps_list_rarefied.rds")
 ps_list_rarefied #this is the ps used to calculate RF
 
 #this is a list of the classification of ASVs from the rarefied ps based on RF
@@ -339,17 +364,50 @@ get_important_phyloseq_and_df <- function(ps_rf_pair) {
   return(list(phyloseq = ps_important, combined_df = combined_df))
 }
 
+# Function to filter phyloseq object to important ASVs and extract combined data with relative abundances
+get_important_ps_and_df_relab <- function(ps_rf_pair) {
+  
+  ps <- ps_rf_pair$physeq
+  rf <- ps_rf_pair$rf
+  
+  # Filter to keep only important ASVs
+  important_asvs <- rf %>%
+    filter(random_forest_relevance == "important") %>%
+    pull(ASV)
+  
+   # Convert to relative abundances
+  ps_rel_abund <- transform_sample_counts(ps, function(x) x / sum(x))
+  
+   # Subset phyloseq object
+  ps_important <- prune_taxa(taxa_names(ps_rel_abund) %in% important_asvs, ps_rel_abund)
+  
+  # Extract OTU table (relative abundance data)
+  abundances <- as.data.frame(otu_table(ps_important)) %>%
+    rownames_to_column(var = "ASV")
+  
+  # Extract taxonomy table
+  taxonomy <- as.data.frame(tax_table(ps_important)) %>%
+    rownames_to_column(var = "ASV")
+  
+  # Merge OTU and taxonomy (this is per ASV)
+  combined_df <- left_join(abundances, taxonomy, by = "ASV")
+  
+  return(list(phyloseq = ps_important, combined_df = combined_df))
+}
+
 # Apply to all 4 sub-communities, you will get a pruned ps with the important ASVs,
 #as well as just the Tax and OTU tables ($combined_df)
-
+#Normal
 important_data_list <- lapply(ps_rf_list, get_important_phyloseq_and_df)
 
 #save this output
 saveRDS(important_data_list, "./R output/07_random_forest/important_data_list.rds")
+
 ```
 
-
+##Clean data
 ```{r}
+
 #Now let's make it into a df so we can plot it 
 # First, pivot each combined df to long format
 important_long_list <- lapply(names(important_data_list), function(name) {
@@ -382,6 +440,7 @@ final_long_df <- final_long_df %>%
 
 # Preview
 head(final_long_df)
+colnames(final_long_df)
 
 # Extract metadata for all phyloseq objects
 sample_metadata_list <- lapply(ps_list_rarefied, function(ps) {
@@ -396,70 +455,153 @@ sample_metadata_all <- bind_rows(
   "at_soil" = sample_metadata_list$Arabidopsis_thaliana.Soil,
   "bo_root" = sample_metadata_list$Brassica_oleraceae.Root,
   "bo_soil" = sample_metadata_list$Brassica_oleraceae.Soil,
-  .id = "Sub_community"
-)
+  .id = "Sub_community")
 
+#raw reads
 final_long_df_with_meta <- final_long_df %>%
   left_join(sample_metadata_all, by = c("Sub_community", "sample"))
 
 # Reorder columns for readability (optional)
 final_long_df_with_meta  <- final_long_df_with_meta  %>%
   select(Sub_community, Plant_species, Sample_type, MeJA_treatment, sample, ASV, abundance, everything())
+head(final_long_df_with_meta)
+
+#let's clean taxonomy
+clean_taxonomy <- function(x) gsub("^\\w__","",x)
+
+final_long_df_with_meta <- final_long_df_with_meta %>%
+  mutate(Domain = clean_taxonomy(Domain),
+         Phylum = clean_taxonomy(Phylum),
+         Class = clean_taxonomy(Class),
+         Order = clean_taxonomy(Order),
+         Family = clean_taxonomy(Family),
+         Genus = clean_taxonomy(Genus),
+         Species = clean_taxonomy(Species))
+#check
+head(final_long_df_with_meta)
+
+#make Burkholderia name shorter, rename df because its too long name 
+#pimp the genus names 
+df <- final_long_df_with_meta %>%
+        mutate(Genus = ifelse(Genus == "Burkholderia-Caballeronia-Paraburkholderia", 
+                        "Burkholderia Complex", Genus)) #ok
+
+#make new labels with Genus and ASV number
+df <- df  %>%
+  mutate(
+    Genus_display = ifelse(is.na(Genus) | Genus == "NA" | Genus == "", "Unknown", Genus),
+    Genus_ASV_label = paste0(Genus_display, "_ASV-", gsub("ASV_", "", ASV)),  # Genus_ASV-1
+    Family_display = ifelse(is.na(Family) | Family == "NA" | Family == "", "Unknown", Family),
+    Family_display_short = str_sub(Family_display, 1, 5),
+    Family_display_short = paste0(Family_display_short, "_ASV-", gsub("ASV_", "", ASV)) )  # Strep_ASV-1
+ 
+#check
+df$Genus_ASV_label #ok
+df$Family_display
+df$Family_display_short
+
+#let's order it by Phylum-Order-Family
+# Count ASVs per Phylum-Order-Family combination
+taxonomy_counts <- df %>%
+  dplyr::count(Phylum, Order, Family) 
+
+# Order Phylum by total ASVs
+phylum_order <- taxonomy_counts %>%
+  group_by(Phylum) %>%
+  summarise(n = sum(n)) %>%
+  arrange(desc(n)) %>%
+  pull(Phylum)
+
+# Order Order within each Phylum by total ASVs
+order_order <- taxonomy_counts %>%
+  group_by(Phylum, Order) %>%
+  summarise(n = sum(n)) %>%
+  arrange(match(Phylum, phylum_order), desc(n)) %>%
+  pull(Order)
+
+# Order Order alphabetically within each Phylum
+#order_order <- taxonomy_counts %>%
+#  distinct(Phylum, Order) %>%
+#  arrange(match(Phylum, phylum_order), Order) %>%
+#  pull(Order)
+
+# Order Family within each Order by total ASVs
+family_order <- taxonomy_counts %>%
+  arrange(match(Phylum, phylum_order), 
+          match(Order, order_order), 
+          desc(n)) %>%
+  pull(Family)
+
+#Alphabetically within each order
+#family_order <- taxonomy_counts %>%
+#  distinct(Family, Order) %>%
+#  arrange(match(Order, order_order), Family) %>%
+#  pull(Family)
+
+#check
+phylum_order
+order_order
+family_order
+
+#re-order data frame for plotting
+df<- df %>%
+  mutate(Phylum = factor(Phylum, levels = phylum_order),
+         Order = factor(Order, levels = order_order),
+         Family = factor(Family, levels = family_order)) %>%
+  arrange(Phylum, Order, Family)
+
+#Finally order the labels
+df <- df %>%
+  mutate(Genus_ASV_label = factor(Genus_ASV_label, 
+                                  levels = unique(df %>% 
+                                    arrange(Phylum, Order, Family) %>% 
+                                    pull(Genus_ASV_label))))
+
+#get taxonomy df to check
+taxonomy_df <- df %>%
+  distinct(Phylum, Class, Order, Family, Genus_ASV_label)%>%
+  mutate(Phylum = factor(Phylum, levels = phylum_order),
+         Order = factor(Order, levels = order_order),
+         Family = factor(Family, levels = family_order)) %>%
+  arrange(Phylum, Order, Family)
+
+#check
+df
+colnames(df)
 
 # Save to file
-write.csv(final_long_df_with_meta, "./R output/07_random_forest/full_important_data_long.csv", row.names = FALSE)
-
-
-#plot it
-ggplot(final_long_df_with_meta, aes(x = ASV, y = abundance, fill = MeJA_treatment)) +
-  geom_boxplot(aes(x = ASV, y = abundance, fill = MeJA_treatment))+
-  geom_jitter(aes(x = ASV, y = abundance, color = MeJA_treatment), 
-              position = position_jitterdodge(jitter.width = 0.2, dodge.width = 0.75), 
-              size = 0.8, alpha = 0.7) +
-  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
-  scale_fill_manual(values = color_treatments) +
-  scale_color_manual(values = color_treatments) +
-  labs(x = "ASV", y = "Abundance", fill = "MeJA Treatment")+
-  axis_looks+
-  facet_wrap(Sample_type ~ Plant_species, scales="free")+
-  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1))
-
+write.csv(df, "./R output/07_random_forest/full_important_data_long.csv", row.names = FALSE)
 
 ```
 
-Now plot it with family information
+##Plot individual ASVs
+Now plot it with the 4 subsets 
 ```{r}
 
-#make name of ASVs with Genus/Family information
-df <- final_long_df_with_meta %>%
-  mutate(
-    Genus_display = ifelse(is.na(Genus) | Genus == "NA" | Genus == "", "Unknown", Genus),
-    Genus_display = gsub("^g__", "", Genus_display),
-    Genus_ASV_label = paste0(Genus_display, "_ASV-", gsub("ASV_", "", ASV)),  # Genus_ASV-1
 
-    Family_display = ifelse(is.na(Family) | Family == "NA" | Family == "", "Unknown", Family),
-    Family_display = gsub("^f__", "", Family_display),
-
-    Family_display_short = str_sub(Family_display, 1, 5),
-    Family_display_short = paste0(Family_display_short, "_ASV-", gsub("ASV_", "", ASV))  # Strep_ASV-1
-  )
-
+#make genus italics
+df2 <- df %>%
+  mutate(Genus_ASV_label = paste0("italic('", Genus, "_", ASV, "')"))
 
 # Plot
-ggplot(df, aes(x = Family_display_short, y = abundance, fill = MeJA_treatment)) +
-  geom_boxplot(aes(x = Family_display_short, y = abundance, fill = MeJA_treatment),
-               outlier.shape = 8, outlier.size = 1.2)+
-  geom_jitter(aes(x = Family_display_short, y = abundance, fill = MeJA_treatment), 
+ggplot(df2, aes(x = Genus_ASV_label, y = abundance, fill = MeJA_treatment)) +
+  geom_boxplot(aes(x = Genus_ASV_label, y = abundance, fill = MeJA_treatment),
+               outlier.shape = 8, outlier.size = 1.2, outlier.stroke = 0.2,
+               linewidth=0.2)+
+  geom_jitter(aes(x = Genus_ASV_label, y = abundance, fill = MeJA_treatment), 
               position = position_jitterdodge(jitter.width = 0.2, dodge.width = 0.75), 
-              shape=21, stroke= 0.5, size = 0.7, alpha = 0.7) +
+              shape=21, stroke= 0.2, size = 0.7, alpha = 0.7) +
   theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
   scale_fill_manual(values = color_treatments) +
   scale_color_manual(values = color_treatments) +
   labs(x = "ASV", y = "Abundance", fill = "MeJA Treatment")+
   axis_looks+
   facet_wrap(Sample_type ~ Plant_species, scales="free")+
+  #facet_grid(Plant_species~Sample_type, scales = "free_x", space = "free_x")+
   theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1))+
-  theme(legend.position = "top")
+  theme(axis.text.x = element_text(colour = "black", size = 9, angle = 45, hjust = 1, face = "plain"))+
+  theme(legend.position = "top")+
+  scale_x_discrete(labels = function(x) parse(text = x)) #for italics
 
 
 #save plot
@@ -468,21 +610,75 @@ mapply(function(x)
   plot = last_plot(),
   filename =x,
   path = "./Plots/07_random_forest",
-  scale = 2.0,
-  width = 2000,
-  height = 1500,
-  units = "px",
+  scale = 1.5,
+  width = 16,
+  height = 16,
+  units = "cm",
   dpi = 300),
 x=c("RF_important_ASVs.svg","RF_important_ASVs.png"))
 
   
 ```
 
+
+##Summary Plot
+```{r}
+
+#summary df with ASV counts
+df_summary <- full_mean_importance %>%
+  group_by(Species, Compartment) %>% 
+  count(Family, Order, Phylum, sort = TRUE)
+
+#Add category for those orders that we want to highlight
+df_summary <- df_summary %>%
+  mutate(Order_simplified = ifelse(Order %in% c("Burkholderiales", "Chitinophagales",
+                                                "Sphingobacteriales", "Rhizobiales"),
+                                   Order, "Other"))
+
+#Order it by number 
+df_summary <- df_summary %>%
+  arrange(Species, Compartment, Family, desc(n))
+
+#plot it
+ggplot(df_summary, aes(x = n, y = Family, fill = Order_simplified)) +
+  geom_bar(stat = "identity") +
+  facet_wrap(Compartment ~ Species, scales = "free_y") +
+  labs(x = "Number of important ASVs", y = "Family", fill = "Order") +
+  scale_fill_manual(values = c("Burkholderiales" = "#E69F00", 
+                               "Chitinophagales" = "#56B4E9", 
+                               "Sphingobacteriales" = "#009E73",
+                               "Rhizobiales" = "#CC79A7",
+                               "Other" = "grey80")) +
+  axis_looks+
+  theme(axis.text.y = element_text(face = "plain", size = 9),
+        strip.text = element_text(face = "bold"),
+        legend.position = "top")
+
+#save plot
+mapply(function(x)
+  ggsave(
+  plot = last_plot(),
+  filename =x,
+  path = "./Plots/07_random_forest",
+  scale = 1.5,
+  width = 10,
+  height = 8,
+  units = "cm",
+  dpi = 300),
+x=c("RF_ASVs_Family_Order.svg","RF_ASVs_Family_Order.png"))
+
+
+```
+
+
+
+#Mean Importance
 ```{r}
 #check mean importance
 full_mean_importance <- read.csv("./R output/07_random_forest/full_mean_importance_data.csv")
 
 unique(full_mean_importance$Family) #20
+
 
 #re-order some factors
 library(forcats)
@@ -493,11 +689,13 @@ phylum_order <- full_mean_importance %>%
   arrange(desc(n)) %>%
   pull(Phylum)
 
+
 # Step 2: Order Phylum by number of ASVs and Family within Phylum (alphabetical within each phylum)
 full_mean_importance <- full_mean_importance %>%
   mutate(Phylum = factor(Phylum, levels = phylum_order)) %>%
   arrange(Phylum, Family) %>%
   mutate(Family = factor(Family, levels = unique(Family)))  # Preserve the order in Family
+
 
 #plot it
 ggplot(full_mean_importance ,
