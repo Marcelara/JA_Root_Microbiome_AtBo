@@ -139,9 +139,9 @@ axis_looks <- theme(axis.text.x = element_text(colour = "black", size = 9,
         panel.grid.minor = element_blank()) #no grid
 
 #Set colors
-color_treatments <- c("#FBF2C4", "#DEA868", "#C7522B", "#9BBAA0") #"Control", "MeJA 0.1mM", "MeJA 1mM", "P. brassicae OS"
-color_species <- c("#146627ff", "#1fb695ff") #at & bo, respectively
-color_compartment <- c("#e7b083ff", "#905423ff") #endo & rhizo, respectively
+color_treatments <- c("#D6D6D6", "#E6C37A", "#A65A2A", "#8BAE91") #"Control", "MeJA 0.1mM", "MeJA 1mM", "P. brassicae OS"
+color_species <- c("#5A8F8F", "#2F6B3A") #at & bo, respectively
+color_compartment <- c("#B28F45", "#846475") #endo & rhizo, respectively
 
 ```
 
@@ -192,9 +192,13 @@ get_NMDS_coordenates <- function(x,y){
   return(df_nmds)
 }
 
+
 #get coordinates
 df_NMDS <- get_NMDS_coordenates(normalization_listed$physeq_filtered_CSS, "bray")
 df_NMDS <- df_NMDS[[1]] #it was a list before idk why
+
+df_NMDS$Sample_type
+df_NMDS$Plant_species
 
 #plot NMDS 
 ggplot(df_NMDS, aes(x=NMDS1,y=NMDS2, 
@@ -202,8 +206,8 @@ ggplot(df_NMDS, aes(x=NMDS1,y=NMDS2,
                     shape=Plant_species,
                     color=Sample_type)) + #outline
   geom_point(aes(color=Sample_type, fill=MeJA_treatment), size=5)+ # individual sample values
-  scale_shape_manual(values=c(21,24))+
-  scale_color_manual(values = c("black", "white"))+ #outline
+  scale_shape_manual(values=c(21,24))+ #cirle At, Triangle Bo
+  scale_color_manual(values = c("white", "black"))+ #white is endo, black rhizo
   scale_fill_manual(values=color_treatments)+ #inside
   ggtitle("NMDS_full")+
   axis_looks+
@@ -272,37 +276,79 @@ df_NMDS_split_full <- mapply(function(df_NMDS_split, centroid_df) {
 
 df_NMDS_split_full <- lapply(df_NMDS_split_full, function(list){ as.data.frame(list)})
   
-#Now, plot the NMDS, first call a function
-plot_NMDS <- function(df,title){
-  #x is df 
-  #y is the centroid df
-  #z is segment df
-  #title is the name of the title in between ""
-  p <- ggplot(df, aes(x=NMDS1,y=NMDS2, 
+
+#Now, plot the NMDS, one per Sp-Root
+
+AT_Endo <- ggplot(df_NMDS_split_full$At_Root, aes(x=NMDS1,y=NMDS2, 
                     fill=MeJA_treatment,
                     color=MeJA_treatment)) + #outline
-  geom_segment(data = df,
+  geom_segment(data = df_NMDS_split_full$At_Root,
                mapping = aes(x=NMDS1, y=NMDS2, 
-               xend = NMDS1_centroid, yend = NMDS2_centroid))+
-  geom_point(aes(fill=MeJA_treatment), shape=21, color="black", size=3, alpha=0.95)+ # individual sample values
+               xend = NMDS1_centroid, yend = NMDS2_centroid), linewidth=0.8, alpha=0.9)+
+  geom_point(aes(fill=MeJA_treatment), shape=21, color="black", stroke = 0.3,
+             size=3, alpha=0.95)+ # individual sample values
   geom_point(aes(x=NMDS1_centroid, y = NMDS2_centroid),
-             size = 5, alpha=0.9, shape=21, color="black") + # centroids
+             size = 5, alpha=0.9, shape=21, color="black",stroke = 0.4,) + # centroids
   scale_fill_manual(values = color_treatments)+ #outline
   scale_color_manual(values = color_treatments)+ #outline
-  ggtitle(title)+
+  ggtitle("AT_Endo")+
   axis_looks+
   theme(legend.position = "none")
-  return(p)
-}
 
-#plot it
-AT_Endo <- plot_NMDS(df_NMDS_split_full$At_Root, "AT_Endo")
-AT_Rhizo <- plot_NMDS(df_NMDS_split_full$At_Soil, "AT_Rhizo")
-BO_Endo <- plot_NMDS(df_NMDS_split_full$Bo_Root, "BO_Endo")
-BO_Rhizo <- plot_NMDS(df_NMDS_split_full$Bo_Soil, "BO_Rhizo")
+
+BO_Endo <- ggplot(df_NMDS_split_full$Bo_Root, aes(x=NMDS1,y=NMDS2, 
+                    fill=MeJA_treatment,
+                    color=MeJA_treatment)) + #outline
+  geom_segment(data = df_NMDS_split_full$Bo_Root,
+               mapping = aes(x=NMDS1, y=NMDS2, 
+               xend = NMDS1_centroid, yend = NMDS2_centroid), linewidth=0.8, alpha=0.9)+
+  geom_point(aes(fill=MeJA_treatment), shape=24, color="black", stroke = 0.3,
+             size=3, alpha=0.95)+ # individual sample values
+  geom_point(aes(x=NMDS1_centroid, y = NMDS2_centroid),
+             size = 5, alpha=0.9, shape=24, color="black",stroke = 0.4,) + # centroids
+  scale_fill_manual(values = color_treatments)+ #outline
+  scale_color_manual(values = color_treatments)+ #outline
+  ggtitle("BO_Endo")+
+  axis_looks+
+  theme(legend.position = "none")
+
+
+AT_Rhizo <- ggplot(df_NMDS_split_full$At_Soil, aes(x=NMDS1,y=NMDS2, 
+                    fill=MeJA_treatment,
+                    color=MeJA_treatment)) + #outline
+  geom_segment(data = df_NMDS_split_full$At_Soil,
+               mapping = aes(x=NMDS1, y=NMDS2, 
+               xend = NMDS1_centroid, yend = NMDS2_centroid), linewidth=0.8, alpha=0.9)+
+  geom_point(aes(fill=MeJA_treatment), shape=21, color="black", stroke = 0.3,
+             size=3, alpha=0.95)+ # individual sample values
+  geom_point(aes(x=NMDS1_centroid, y = NMDS2_centroid),
+             size = 5, alpha=0.9, shape=21, color="black",stroke = 0.4,) + # centroids
+  scale_fill_manual(values = color_treatments)+ #outline
+  scale_color_manual(values = color_treatments)+ #outline
+  ggtitle("AT_Rhizo")+
+  axis_looks+
+  theme(legend.position = "none")
+
+
+BO_Rhizo <- ggplot(df_NMDS_split_full$Bo_Soil, aes(x=NMDS1,y=NMDS2, 
+                    fill=MeJA_treatment,
+                    color=MeJA_treatment)) + #outline
+  geom_segment(data = df_NMDS_split_full$Bo_Soil,
+               mapping = aes(x=NMDS1, y=NMDS2, 
+               xend = NMDS1_centroid, yend = NMDS2_centroid), linewidth=0.8, alpha=0.9)+
+  geom_point(aes(fill=MeJA_treatment), shape=24, color="black", stroke = 0.3,
+             size=3, alpha=0.95)+ # individual sample values
+  geom_point(aes(x=NMDS1_centroid, y = NMDS2_centroid),
+             size = 5, alpha=0.9, shape=24, color="black",stroke = 0.4,) + # centroids
+  scale_fill_manual(values = color_treatments)+ #outline
+  scale_color_manual(values = color_treatments)+ #outline
+  ggtitle("BO_Rhizo")+
+  axis_looks+
+  theme(legend.position = "none")
+
 
 #Make it a single figure 
-ggarrange(AT_Endo, AT_Rhizo,BO_Endo, BO_Rhizo,  ncol=2, nrow=2)
+ggarrange(AT_Endo, BO_Endo, AT_Rhizo, BO_Rhizo, ncol=4)
 
 #save plot
 mapply(function(x)
@@ -311,8 +357,8 @@ mapply(function(x)
   filename =x,
   path = "./Plots/02_beta_diversity",
   scale = 1.8,
-  width = 1000,
-  height = 900,
+  width = 2000,
+  height = 500,
   units = "px",
   dpi = 300),
 x=c("NMDS_SpComp.svg","NMDS_SpComp.png"))
@@ -386,6 +432,7 @@ dip_result3 <- beta_disp_plotAndTest(ps_list_CSS, "MeJA_treatment")
 
 
 
+
 ## 2.3 - Run PERMANOVA 
 
 A permutation anova will tell if the differences in the microbial community structure are significant or not. they will essentially help you separate the data clouds of your ordination with confidence levels
@@ -436,6 +483,37 @@ permanova_with_list <- function(phyloseq_list, rhs_model) {
 set.seed(5235)
 perm_by4 <- permanova_with_list(ps_list_CSS, "MeJA_treatment")
 perm_by4 <- lapply(perm_by4, function(perm){as.data.frame(perm)})
+
+
+#get df
+library(dplyr)
+library(tidyr)
+library(purrr)
+
+# Function to tidy one PERMANOVA table (add sample source as a column)
+extract_perm_table <- function(perm_table, sample_name) {
+  perm_table %>%
+    as.data.frame() %>%
+    tibble::rownames_to_column("Source") %>%
+    mutate(Sample = sample_name)
+}
+
+# Apply the function to each element in the list
+combined_perm <- map2_df(perm_by4, names(perm_by4), extract_perm_table)
+
+#plit 'Sample' into Plant_species and Compartment
+combined_perm <- combined_perm %>%
+  separate(Sample, into = c("Plant_species", "Compartment"), sep = "\\.")
+
+# Final combined table
+print(combined_perm)
+
+# copy to clipboard for pasting into Excel
+write.table(combined_perm, "clipboard", sep = "\t", row.names = FALSE)
+
+
+
+
 
 ```
 
