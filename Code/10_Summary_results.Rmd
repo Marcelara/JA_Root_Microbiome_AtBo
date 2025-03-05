@@ -6,24 +6,56 @@ output: html_document
 ---
 
 Clean up
-
 ```{r}
 rm(ps_rf_list, ps_imp_taxa_l, ps_list_treat, plots, plot_Endo, plot_Rhizo, plot, ps_family, ps_at_root_important)
 gc()
 ```
 
-#Loading data
+#Load libraries 
+```{r}
+#Handling data 
+library("dplyr")
+library("tibble")
+library("stringr")  # to wrangle string vectors
+library("tidyr")
+library("ggrepel")  # to avoid legends overlapping in your plot
+library("ggpubr")
+library("purrr")  # has map() to select table elements
+```
 
+#Settings for plots
+```{r}
+#Set plots theme
+ggplot2::theme_set(theme_bw())
+
+# Set default axis looks
+axis_looks <- theme(axis.text.x = element_text(colour = "black", size = 9,
+                                               face = "bold", angle=0, hjust=0.5))+ #text in X
+  theme(axis.text.y = element_text(colour = "black", size = 9, face = "bold"))+ #text in y
+  theme(axis.title=element_text(size=11, face = "bold"))+ #all texts
+  theme(axis.title.y = element_text(margin = ggplot2::margin(t = 0, r = 10, b = 0, l = 0)))+
+  theme(panel.grid.major = element_blank(), #no grid
+        panel.grid.minor = element_blank()) #no grid
+
+#Set colors
+color_treatments <- c("#FBF2C4", "#DEA868", "#C7522B", "#9BBAA0") #"Control", "MeJA 0.1mM", "MeJA 1mM", "P. brassicae OS"
+color_species <- c("#146627ff", "#1fb695ff") #at & bo, respectively
+color_compartment <- c("#e7b083ff", "#905423ff") #endo & rhizo, respectively
+```
+
+
+
+#Loading data
 ```{r}
 
-combined_da #results differential abundance 
+combined_da_df #results differential abundance 
 central_keystone_asv_df #results network analysis 
 important_data_list #results random forest
 
 #Vectors with just names of ASVs
-DA_ASV_list
-NA_ASV_list
-RF_ASV_list
+DA_ASV_list <- important_ASV_list$DA_ASV_list
+NA_ASV_list <- important_ASV_list$NA_ASV_list
+RF_ASV_list <- important_ASV_list$RF_ASV_list
 
 #let's save it into a list 
 important_ASV_list <- list(DA_ASV_list = DA_ASV_list, 
@@ -129,3 +161,9 @@ rm(physeq_filtered)
 ```
 
 maybe later think to add for those of DA, whether they come from meja 0.1, 1 or OS, as well for RF
+
+
+```{r}
+save.image("./R output/env.10_summary_results.RData")
+```
+
