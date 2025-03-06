@@ -676,7 +676,6 @@ x=c("RF_ASVs_Family_Order.svg","RF_ASVs_Family_Order.png"))
 ```{r}
 #check mean importance
 full_mean_importance <- read.csv("./R output/07_random_forest/full_mean_importance_data.csv")
-
 unique(full_mean_importance$Family) #20
 
 
@@ -697,18 +696,36 @@ full_mean_importance <- full_mean_importance %>%
   mutate(Family = factor(Family, levels = unique(Family)))  # Preserve the order in Family
 
 
+#Add category for those orders that we want to highlight
+full_mean_importance <- full_mean_importance %>%
+  mutate(Order_simplified = ifelse(Order %in% c("Burkholderiales", "Chitinophagales",
+                                                "Sphingobacteriales", "Rhizobiales"),
+                                   Order, "Other"))
+
+#Order it by number 
+full_mean_importance<- full_mean_importance %>%
+  arrange(Species, Compartment, Family)
+
 #plot it
 ggplot(full_mean_importance ,
-       aes(x = Family, y = Mean_importance)) +
-  geom_point(size = 4, alpha = 0.6) +
+       aes(x = Family, y = Mean_importance, color=Order)) +
+  geom_point(aes(x = Family, y = Mean_importance, color=Order),
+             size = 4, alpha = 0.6) +
   labs(y = "Mean importance") +
-  #scale_color_manual(values = color_JAtreatments) +
-  #geom_hline(yintercept = 0, linetype = "dashed", color = "black") +
-  facet_grid(Compartment + Species ~ Order, scales = "free_x", space = "free_x") +
+  scale_color_manual(values = c("Burkholderiales" = "#E69F00", 
+                               "Chitinophagales" = "#56B4E9", 
+                               "Sphingobacteriales" = "#009E73",
+                               "Rhizobiales" = "#CC79A7",
+                               "Other" = "grey80"))+
+  facet_grid(Compartment ~ Species, scales = "free_x", space = "free_x") +
+  axis_looks+
   theme(axis.text.x = element_text(angle = 90, hjust = 1, size = 9, face = "bold"))+
   theme(legend.position = "top")
 
+```
 
+
+```{r}
 #plot frequencies
 asv_counts <- full_mean_importance %>%
   dplyr::count(Phylum, Order, Family, Species, Compartment) %>%
@@ -727,7 +744,7 @@ asv_counts <- asv_counts %>%
 
 ggplot(asv_counts, aes(x = Family, y = Number_of_ASVs, fill = Compartment)) +
   geom_bar(stat = "identity", position = position_dodge()) +
-  facet_grid(Species ~ Order, scales = "free_x", space = "free_x") +
+  facet_grid(Species ~ Compartment, scales = "free_x", space = "free_x") +
   labs(y = "Number of ASVs", x = "Family") +
   scale_fill_manual(values=color_compartment)+
   theme(axis.text.x = element_text(angle = 90, hjust = 1, size = 8))

@@ -552,21 +552,23 @@ write.csv(
 )
 ```
 
-#checking results
+#Loading results
 
+##Nodes
 ```{r}
 
 #Individual results
-Nodes_AT_root <- read_csv("./R output/Network files/Nodes_AT_root.csv")
-Nodes_BO_root <- read_csv("./R output/Network files/Nodes_BO_root.csv")
-Nodes_AT_soil <- read_csv("./R output/Network files/Nodes_AT_soil.csv")
-Nodes_BO_soil <- read_csv("./R output/Network files/Nodes_BO_soil.csv")
+Nodes_AT_root <- read_csv("./R output/06_network_analysis/Nodes_AT_root.csv")
+Nodes_BO_root <- read_csv("./R output/06_network_analysis/Nodes_BO_root.csv")
+Nodes_AT_soil <- read_csv("./R output/06_network_analysis/Nodes_AT_soil.csv")
+Nodes_BO_soil <- read_csv("./R output/06_network_analysis/Nodes_BO_soil.csv")
 
 #network metrics (Summary)
-network_metrics <- read_csv("./R output/Network files/netwrok_metrics.csv")
+network_metrics <- read_csv("./R output/06_network_analysis/netwrok_metrics.csv")
 
 #check colnames
-colnames(Nodes_AT_root)  
+colnames(Nodes_AT_root)
+colnames(network_metrics)
 
 #make a list 
 Nodes_list <- list(Nodes_AT_root = Nodes_AT_root,
@@ -621,6 +623,9 @@ central_keystone_asv_list <- lapply(Nodes_list, function(df) {
 
 #make it a single df 
 central_keystone_asv_df <- bind_rows(central_keystone_asv_list, .id = "Sub_community")
+central_keystone_asv_df  <- as.data.frame(central_keystone_asv_df)
+head(central_keystone_asv_df)
+
 
 #save this output;
 saveRDS(central_keystone_asv_df, "./R output/Network files/ASVs_central_Network_Analysis_df.rds")
@@ -632,11 +637,372 @@ rm(add_module_roles, Nodes_list, central_asv_list, central_keystone_asv_list, No
 ```
 
 
-# 6.9 -  overwrite saved session [MA: SKIP]
+##Edges
 ```{r}
 
-save.image("./R output/analysis_session.RData")
+#Individual results
+Edges_AT_root <- read_csv("./R output/06_network_analysis/Edges_AT_root.csv")
+Edges_BO_root <- read_csv("./R output/06_network_analysis/Edges_BO_root.csv")
+Edges_AT_soil <- read_csv("./R output/06_network_analysis/Edges_AT_soil.csv")
+Edges_BO_soil <- read_csv("./R output/06_network_analysis/Edges_BO_soil.csv")
+
+#quick plot
+ggplot(Edges_AT_root, aes(x = weight, fill = positive_negative)) +
+    geom_histogram(bins = 30, color = "black") +
+    labs(x = "Edge weight", y = "Count") +
+    theme_minimal()
+
+#quick plot
+Edges_AT_root %>%
+    ggplot(aes(x = weighted_edge_betweenness)) +
+    geom_histogram(bins = 30, fill = "steelblue", color = "black") +
+    theme_minimal() +
+    labs(x = "Weighted edge betweenness", y = "Count")
+
 
 ```
+
+Quick exploration with plots (skip)
+```{r}
+
+library(tidyverse)
+
+# Clasificar los nodos de AT_root como keystone, hub o connector
+Nodes_AT_root <- Nodes_AT_root %>%
+    mutate(module_hub = ifelse(Zi > 2.5, "Module Hub", "Non-Hub"),
+           module_connector = ifelse(Pi > 0.62, "Module Connector", "Non-Connector"),
+           is_keystone = keystone_taxa == "Keystone" | 
+                         module_hub == "Module Hub" | 
+                         module_connector == "Module Connector")
+
+# Quedarse solo con edges donde ambos nodos son keystones/hubs/connectors
+
+Nodes_AT_root <- Nodes_AT_root %>%
+    mutate(Family = ifelse(grepl("^f__", Family), gsub("^f__", "", Family), Family))
+
+
+edges_with_taxa <- Edges_AT_root %>%
+    left_join(Nodes_AT_root %>% select(Row.names, Family, is_keystone), 
+              by = c("from" = "Row.names")) %>%
+    left_join(Nodes_AT_root %>% select(Row.names, Family, is_keystone), 
+              by = c("to" = "Row.names")) %>%
+    dplyr::rename(from_family = Family.x, from_keystone = is_keystone.x,
+           to_family = Family.y, to_keystone = is_keystone.y) %>%
+    filter(from_keystone | to_keystone)
+  
+head(edges_with_taxa)
+
+edges_with_taxa <- Edges_AT_root %>%
+    left_join(Nodes_AT_root %>% select(Row.names, Family, module_hub, module_connector), 
+              by = c("from" = "Row.names")) %>%
+    left_join(Nodes_AT_root %>% select(Row.names, Family, module_hub, module_connector), 
+              by = c("to" = "Row.names")) %>%
+    dplyr::rename(from_family = Family.x, from_hub = module_hub.x, from_connector = module_connector.x,
+                  to_family = Family.y, to_hub = module_hub.y, to_connector = module_connector.y) %>%
+    filter(from_hub == "Module Hub" | from_connector == "Module Connector" |
+           to_hub == "Module Hub" | to_connector == "Module Connector")
+
+ 
+library(ggalluvial)
+
+edges_with_taxa %>%
+    count(from_family, to_family, positive_negative) %>%
+    ggplot(aes(axis1 = from_family, axis2 = to_family, y = n, fill = positive_negative)) +
+    geom_alluvium(width = 0.2, alpha = 0.8) +
+    geom_stratum() +
+    geom_text(stat = "stratum", aes(label = after_stat(stratum)), size = 3) +
+    scale_fill_manual(values = c("positive" = "#66c2a5", "negative" = "#fc8d62")) +
+    labs(x = "Family", y = "Number of edges", fill = "Edge Type",
+         title = "AT Root - Family connections (Hubs + Connectors)") +
+    theme_minimal() +
+    theme(strip.text = element_text(face = "bold"),
+          axis.text.x = element_text(angle = 45, hjust = 1))
+
+
+```
+
+##Arrange data 
+```{r}
+
+#make new column
+Nodes_AT_root$Sub_community <- "AT_root"
+Nodes_AT_soil$Sub_community <- "AT_soil"
+Nodes_BO_root$Sub_community <- "BO_root"
+Nodes_BO_soil$Sub_community <- "BO_soil"
+
+#make a single df 
+all_nodes <- bind_rows(
+    Nodes_AT_root,
+    Nodes_AT_soil,
+    Nodes_BO_root,
+    Nodes_BO_soil)
+
+# Clasificación (Keystone/Hubs/Connectors)
+all_nodes <- all_nodes %>%
+    mutate(module_hub = ifelse(Zi > 2.5, "Module Hub", "Non-Hub"),
+           module_connector = ifelse(Pi > 0.62, "Module Connector", "Non-Connector"),
+           Keystone_Type = case_when(
+               keystone_taxa == "Keystone" ~ "Keystone (manual)",
+               #module_hub == "Module Hub" & module_connector == "Module Connector" ~ "Hub+Connector",
+               module_hub == "Module Hub" ~ "Hub",
+               module_connector == "Module Connector" ~ "Connector",
+               TRUE ~ "Other"))
+
+#clean taxonomy
+all_nodes <- all_nodes %>%
+    mutate(Domain = gsub("^d__", "", Domain),
+        Phylum = gsub("^p__", "", Phylum),
+        Class = gsub("^c__", "", Class),
+        Order = gsub("^o__", "", Order),
+        Family = gsub("^f__", "", Family),
+        Genus = gsub("^g__", "", Genus),
+        Species = gsub("^s__", "", Species))
+
+#important families we've been highlighting 
+main_families <- c(
+  "Burkholderiaceae", 
+  "Chitinophagaceae",
+  "Comamonadaceae",
+  "Flavobacteriaceae",
+  "Oxalobacteraceae",
+  "Rhizobiaceae",
+  "Sphingobacteriaceae",
+  "Streptomycetaceae",
+  "Xanthobacteraceae") 
+
+#make new column with these families written and otherwise, 'Other' will appear
+all_nodes  <- all_nodes  %>%
+    mutate(Family_simplified = ifelse(Family %in% main_families, Family, "Other"))
+
+#check
+head(as.data.frame(all_nodes)) #ok
+
+#re-order for the plot
+all_nodes <- all_nodes %>%
+    mutate(Sub_community = factor(Sub_community, levels = c("AT_root", "BO_root", "AT_soil", "BO_soil")))
+
+
+```
+
+###Color management
+```{r}
+
+#load full taxonomy table df
+taxonomy_table_full <- readRDS("./R output/10_summary_results/taxonomy_table_full.rds")
+
+main_families <- c("Burkholderiaceae", 
+  "Chitinophagaceae",
+  "Comamonadaceae",
+  "Flavobacteriaceae",
+  "Oxalobacteraceae",
+  "Rhizobiaceae",
+  "Sphingobacteriaceae",
+  "Streptomycetaceae",
+  "Xanthobacteraceae") 
+
+#lets check to which order they belong to
+main_families_order_class <- taxonomy_table_full %>%
+    filter(Family %in% main_families) %>%
+    select(Family, Order, Class) %>%
+    distinct()  # Si hay duplicados, los elimina
+
+rownames(main_families_order_class) <- NULL #delete rownames 
+
+#Get main orders 
+main_orders <- unique(main_families_order_class$Order)
+
+#let's just write them here so we can view them
+main_orders <- c("Streptomycetales",
+                 "Flavobacteriales",
+                 "Burkholderiales",
+                 "Rhizobiales",
+                 "Chitinophagales",
+                 "Sphingobacteriales")
+
+
+#color vectors 
+# Order colors - you can adapt these if needed
+Order_col <- c(
+    "Streptomycetales" = "#CC79A7",       # Morado (antes Rhizobiales)
+    "Flavobacteriales" = "#0072B2",       # Azul oscuro
+    "Burkholderiales" = "#FB8072",        # Rosa salmón fuerte
+    "Rhizobiales" = "#F5C710",            # Amarillo fuerte
+    "Chitinophagales" = "#56B4E9",        # Azul cielo
+    "Sphingobacteriales" = "#009E73")      # Verde fuerte
+
+
+
+# Family colors matching the new logic
+Family_col <- c(
+    "Burkholderiaceae" = "#F7A7A4",      # Burkholderiales
+    "Chitinophagaceae" = "#56B4E9",      # Chitinophagales
+    "Comamonadaceae" = "#F26B6C",        # Burkholderiales - tono diferente
+    "Flavobacteriaceae" = "#0072B2",     # Flavobacteriales
+    "Oxalobacteraceae" = "#FEE2C7",      # Burkholderiales - otro tono diferente
+    "Rhizobiaceae" = "#FED700",          # Rhizobiales - amarillo más suave
+    "Sphingobacteriaceae" = "#009E73",   # Sphingobacteriales
+    "Streptomycetaceae" = "#CC79A7",     # Streptomycetales
+    "Xanthobacteraceae" = "#D9A417")      # Rhizobiales - amarillo fuerte
+
+
+
+#Add gray for others
+order_colors <- c(Order_col, "Other" = "grey70")
+family_colors <- c(Family_col , "Other" = "grey70")
+
+
+```
+
+
+```{r}
+#Set plots theme
+ggplot2::theme_set(theme_bw())
+
+# Set default axis looks
+axis_looks <- theme(axis.text.x = element_text(colour = "black", size = 9,
+                                               face = "bold", angle=0, hjust=0.5))+ #text in X
+  theme(axis.text.y = element_text(colour = "black", size = 8, face = "bold"))+ #text in y
+  theme(axis.title=element_text(size=11, face = "bold"))+ #all texts
+  theme(axis.title.y = element_text(margin = ggplot2::margin(t = 0, r = 10, b = 0, l = 0)))+
+  theme(panel.grid.major = element_blank(), #no grid
+        panel.grid.minor = element_blank()) #no grid
+```
+
+
+
+### Full plot
+```{r}
+
+#Full; also with regular nodes 
+
+# Define keystone shapes and regular shape for Other
+keystone_shapes <- c(
+    "Keystone (manual)" = 23,
+    "Hub" = 21,
+    "Connector" = 22,
+    "Other" = 16)  # Regular point
+
+#plot it 
+ggplot(all_nodes, aes(x = Zi, y = Pi,
+                      shape = Keystone_Type, fill = Family_simplified, color = Family_simplified)) +
+    geom_point(data = all_nodes %>% filter(Keystone_Type == "Other"),  # Faded regular nodes (no outline)
+               aes(color = Family_simplified), 
+               size = 2, alpha = 0.5) + 
+    geom_point(data = all_nodes %>% filter(Keystone_Type != "Other"), # Important-Keystone with outline
+               aes(fill = Family_simplified), 
+               size = 4, color = "black", stroke = 0.3, alpha = 0.9) +  
+    geom_hline(yintercept = 0.62, linetype = "dotted", color = "gray",linewidth=0.5) +
+    geom_vline(xintercept = 2.5, linetype = "dotted", color = "gray",,linewidth=0.5) +
+    labs(x = "Within-module connectivity (Zi)",
+         y = "Among-module connectivity (Pi)",
+         title = "Keystone, Hubs & Connectors across Sub-communities",
+         fill = "Family", color = "Family") +
+    scale_shape_manual(values = keystone_shapes) +
+    scale_fill_manual(values = family_colors,
+                      guide = guide_legend(override.aes = list(shape = 21, size = 4))) +
+    scale_color_manual(values = family_colors,
+                       guide = guide_legend(override.aes = list(shape = 16, size = 4))) +
+    facet_grid(~Sub_community) +
+    axis_looks +
+    theme(legend.position = "top")
+
+
+#Now if you want to highlight Mucilinagibacter;
+mucilagi_asvs <- all_nodes %>%
+    filter(Genus == "Mucilaginibacter" & Keystone_Type %in% c("Connector", "Hub", "Keystone (manual)"))
+print(mucilagi_asvs$Row.names)
+
+#plot it 
+ggplot(all_nodes, aes(x = Zi, y = Pi,
+                      shape = Keystone_Type, fill = Family_simplified, color = Family_simplified)) +
+    geom_point(data = all_nodes %>% filter(Keystone_Type == "Other"),
+               aes(color = Family_simplified), 
+               size = 1, alpha = 0.4) +  # Faded regular nodes (no outline)
+    geom_point(data = all_nodes %>% filter(Keystone_Type != "Other"),
+               aes(fill = Family_simplified), 
+               size = 3, color = "black", stroke = 0.3, alpha = 0.9) +  # Important-Keystone with outline
+    geom_text(data = mucilagi_asvs, aes(label = Row.names),
+              size = 3, hjust = -0.2, vjust = -0.2, color = "black")+
+    geom_hline(yintercept = 0.62, linetype = "dotted", color = "gray",linewidth=0.5) +
+    geom_vline(xintercept = 2.5, linetype = "dotted", color = "gray",,linewidth=0.5) +
+    labs(x = "Within-module connectivity (Zi)",
+         y = "Among-module connectivity (Pi)",
+         title = "Keystone, Hubs & Connectors across Sub-communities",
+         fill = "Family", color = "Family") +
+    scale_shape_manual(values = keystone_shapes) +
+    scale_fill_manual(values = family_colors,
+                      guide = guide_legend(override.aes = list(shape = 21, size = 4))) +
+    scale_color_manual(values = family_colors,
+                       guide = guide_legend(override.aes = list(shape = 16, size = 4))) +
+    facet_grid(~Sub_community) +
+    axis_looks +
+    theme(legend.position = "top")
+
+#Save plot
+mapply(function(x)
+  ggsave(
+  plot = last_plot(),
+  filename =x,
+  path = "./Plots/06_network_analysis",
+  scale = 1.5,
+  width = 10.5,
+  height = 6,
+  units = "cm",
+  dpi = 300),
+x=c("Zi_Pi.svg","Zi_Pi.png"))
+
+
+```
+
+### Only keystone
+```{r}
+#plot only the keystone taxa
+# Nos quedamos solo con los nodos importantes (descartamos "Other")
+keystone_nodes <- all_nodes %>%
+    filter(Keystone_Type != "Other")
+
+keystone_shapes_K <- c(
+    "Keystone (manual)" = 24,
+    "Hub" = 21,
+    "Connector" = 22)
+
+#plot it 
+ggplot(keystone_nodes, aes(x = Zi, y = Pi,
+                      shape = Keystone_Type, fill = Family_simplified, color = Family_simplified)) +
+    geom_point(data = all_nodes %>% filter(Keystone_Type == "Other"),
+               aes(color = Family_simplified), 
+               size = 2, alpha = 0.5) +  # Faded regular nodes (no outline)
+    geom_point(data = all_nodes %>% filter(Keystone_Type != "Other"),
+               aes(fill = Family_simplified), 
+               size = 4, color = "black", stroke = 0.3, alpha = 0.9) +  # Important-Keystone with outline
+    geom_text(data = mucilagi_asvs, aes(label = Row.names),
+              size = 3, hjust = -0.2, vjust = -0.2, color = "black")+
+    geom_hline(yintercept = 0.62, linetype = "dashed", color = "red") +
+    geom_vline(xintercept = 2.5, linetype = "dashed", color = "red") +
+    labs(x = "Within-module connectivity (Zi)",
+         y = "Among-module connectivity (Pi)",
+         title = "Keystone, Hubs & Connectors across Sub-communities",
+         fill = "Family", color = "Family") +
+    scale_shape_manual(values = keystone_shapes_K) +
+    scale_fill_manual(values = family_colors,
+                      guide = guide_legend(override.aes = list(shape = 21, size = 4))) +
+    scale_color_manual(values = family_colors,
+                       guide = guide_legend(override.aes = list(shape = 16, size = 4))) +
+    facet_grid(~Sub_community) +
+    axis_looks +
+    theme(legend.position = "right")
+
+
+```
+
+Escribir leyendas
+
+Cambiar supplementary figures (if needed)
+
+Checar puntos de la discusion
+
+Agregar referencias 
+
+
 
 after this, plot netowrk on cytoscape. network analysis complete! proceed to script 7_random_forest
