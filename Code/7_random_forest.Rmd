@@ -505,12 +505,6 @@ df$Family_display_short
 taxonomy_counts <- df %>%
   dplyr::count(Phylum, Order, Family) 
 
-# Order Phylum by total ASVs
-phylum_order <- taxonomy_counts %>%
-  group_by(Phylum) %>%
-  summarise(n = sum(n)) %>%
-  arrange(desc(n)) %>%
-  pull(Phylum)
 
 # Order Order within each Phylum by total ASVs
 order_order <- taxonomy_counts %>%
@@ -519,11 +513,6 @@ order_order <- taxonomy_counts %>%
   arrange(match(Phylum, phylum_order), desc(n)) %>%
   pull(Order)
 
-# Order Order alphabetically within each Phylum
-#order_order <- taxonomy_counts %>%
-#  distinct(Phylum, Order) %>%
-#  arrange(match(Phylum, phylum_order), Order) %>%
-#  pull(Order)
 
 # Order Family within each Order by total ASVs
 family_order <- taxonomy_counts %>%
@@ -531,6 +520,23 @@ family_order <- taxonomy_counts %>%
           match(Order, order_order), 
           desc(n)) %>%
   pull(Family)
+
+
+# Order Phylum by total ASVs
+phylum_order <- taxonomy_counts %>%
+  group_by(Phylum) %>%
+  summarise(n = sum(n)) %>%
+  arrange(desc(n)) %>%
+  pull(Phylum)
+
+
+
+# Order Order alphabetically within each Phylum
+#order_order <- taxonomy_counts %>%
+#  distinct(Phylum, Order) %>%
+#  arrange(match(Phylum, phylum_order), Order) %>%
+#  pull(Order)
+
 
 #Alphabetically within each order
 #family_order <- taxonomy_counts %>%
@@ -548,7 +554,7 @@ df<- df %>%
   mutate(Phylum = factor(Phylum, levels = phylum_order),
          Order = factor(Order, levels = order_order),
          Family = factor(Family, levels = family_order)) %>%
-  arrange(Phylum, Order, Family)
+  arrange(Family, Order,Phylum)
 
 #Finally order the labels
 df <- df %>%
@@ -563,7 +569,7 @@ taxonomy_df <- df %>%
   mutate(Phylum = factor(Phylum, levels = phylum_order),
          Order = factor(Order, levels = order_order),
          Family = factor(Family, levels = family_order)) %>%
-  arrange(Phylum, Order, Family)
+  arrange(Family, Order)
 
 #check
 df
@@ -582,6 +588,27 @@ Now plot it with the 4 subsets
 #make genus italics
 df2 <- df %>%
   mutate(Genus_ASV_label = paste0("italic('", Genus, "_", ASV, "')"))
+
+#order by Family
+df2  <- df2  %>%
+  mutate(
+    Phylum = as.character(Phylum),
+    Order = as.character(Order),
+    Family = as.character(Family)) %>%
+  arrange(Family, Order)
+
+
+
+df2 <- df2 %>%
+  mutate(
+    Phylum = as.character(Phylum),
+    Order = as.character(Order),
+    Family = as.character(Family)
+  ) %>%
+  arrange(Family, Order) %>%
+  mutate(Genus_ASV_label = factor(Genus_ASV_label, levels = unique(Genus_ASV_label)))
+
+
 
 # Plot
 ggplot(df2, aes(x = Genus_ASV_label, y = abundance, fill = MeJA_treatment)) +
@@ -611,8 +638,8 @@ mapply(function(x)
   filename =x,
   path = "./Plots/07_random_forest",
   scale = 1.5,
-  width = 16,
-  height = 16,
+  width = 14,
+  height = 14,
   units = "cm",
   dpi = 300),
 x=c("RF_important_ASVs.svg","RF_important_ASVs.png"))
@@ -620,6 +647,12 @@ x=c("RF_important_ASVs.svg","RF_important_ASVs.png"))
   
 ```
 
+```{r}
+key_df <- df2 %>%
+  select(Plant_species, Sample_type, ASV, Order, Family) %>%
+  distinct()
+
+```
 
 ##Summary Plot
 ```{r}
