@@ -909,12 +909,12 @@ Bole.Endo <- output_fisher_summary_trees$Brassica_oleraceae.Root$df
 Bole.Endo <- Bole.Endo %>% mutate(Species="BO", Compartment="Endo")
 
 Bole.Rhizo <- output_fisher_summary_trees$Brassica_oleraceae.Soil$df
-Bole.Rhizo  <- Atha.Rhizo  %>% mutate(Species="BO", Compartment="Rhizo")
+Bole.Rhizo  <- Bole.Rhizo  %>% mutate(Species="BO", Compartment="Rhizo")
 
 
 all <- rbind(Atha.Endo, Atha.Rhizo, Bole.Endo, Bole.Rhizo)
-all <- all %>% filter(fdr_p < 0.1)
-
+all <- all %>% filter(fdr_p < 0.2)
+View(all)
 
 ```
 
