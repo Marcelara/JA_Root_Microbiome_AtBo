@@ -272,8 +272,7 @@ combined_da <- bind_rows(
   tidy_da_result(DA_results$caterpillarOS$At_Root, "A. thaliana", "Root", "Caterpillar OS"),
   tidy_da_result(DA_results$caterpillarOS$At_Soil, "A. thaliana", "Soil", "Caterpillar OS"),
   tidy_da_result(DA_results$caterpillarOS$Bo_Root, "B. oleracea", "Root", "Caterpillar OS"),
-  tidy_da_result(DA_results$caterpillarOS$Bo_Soil, "B. oleracea", "Soil", "Caterpillar OS")
-)
+  tidy_da_result(DA_results$caterpillarOS$Bo_Soil, "B. oleracea", "Soil", "Caterpillar OS"))
 
 # Optional — remove prefixes like "p__", "f__", etc., for cleaner plot labels
 clean_taxonomy <- function(x) gsub("^\\w__","",x)
@@ -490,6 +489,64 @@ x=c("log2_Full.svg","log2_Full.png"))
 ```
 
 #Pheatmaps 
+
+##Colors
+```{r}
+#get vector for main families 
+main_families <- c(
+  "Burkholderiaceae", 
+  "Chitinophagaceae",
+  "Comamonadaceae",
+  "Flavobacteriaceae",
+  "Oxalobacteraceae",
+  "Rhizobiaceae",
+  "Sphingobacteriaceae",
+  "Streptomycetaceae",
+  "Xanthobacteraceae")
+
+# Family colors matching the new logic
+Family_col <- c(
+    "Burkholderiaceae" = "#F7A7A4",      # Burkholderiales
+    "Chitinophagaceae" = "#56B4E9",      # Chitinophagales
+    "Comamonadaceae" = "#F26B6C",        # Burkholderiales - tono diferente
+    "Flavobacteriaceae" = "#0072B2",     # Flavobacteriales
+    "Oxalobacteraceae" = "#FEE2C7",      # Burkholderiales - otro tono diferente
+    "Rhizobiaceae" = "#FED700",          # Rhizobiales - amarillo más suave
+    "Sphingobacteriaceae" = "#009E73",   # Sphingobacteriales
+    "Streptomycetaceae" = "#CC79A7",     # Streptomycetales
+    "Xanthobacteraceae" = "#D9A417")      # Rhizobiales - amarillo fuerte
+
+
+
+#Add gray for others
+family_colors <- c(Family_col , "Other" = "grey70")
+
+
+#Main orders
+main_orders <- c("Streptomycetales",
+                 "Flavobacteriales",
+                 "Burkholderiales",
+                 "Rhizobiales",
+                 "Chitinophagales",
+                 "Sphingobacteriales")
+
+
+#color vectors 
+Order_col <- c(
+    "Streptomycetales" = "#CC79A7",       # Morado (antes Rhizobiales)
+    "Flavobacteriales" = "#0072B2",       # Azul oscuro
+    "Burkholderiales" = "#FB8072",        # Rosa salmón fuerte
+    "Rhizobiales" = "#F5C710",            # Amarillo fuerte
+    "Chitinophagales" = "#56B4E9",        # Azul cielo
+    "Sphingobacteriales" = "#009E73")      # Verde fuerte
+
+#Add gray for others
+order_colors <- c(Order_col , "Other" = "grey70")
+
+
+```
+
+
 ##Endo
 Let's do one per compartment & use pheatmap
 ```{r}
@@ -498,7 +555,11 @@ Let's do one per compartment & use pheatmap
 endo_da <- combined_da %>%
   filter(Compartment == "Root") %>%
   droplevels() %>% 
-  mutate(Condition = factor(Condition))
+  mutate(Condition = factor(Condition))%>%
+  mutate(Family = as.character(Family)) %>% 
+  mutate(Family_simplified = ifelse(Family %in% main_families, Family, "Other"))%>% 
+  mutate(Order= as.character(Order))%>% 
+  mutate(Order_simplified = ifelse(Order %in% main_orders, Order, "Other"))
 
 endo_da$Condition
 
@@ -512,6 +573,14 @@ endo_da <- endo_da %>%
 
 endo_da <- endo_da %>% arrange(Family)
 
+#order by Phylum
+endo_da <- endo_da %>%
+  mutate(
+    Phylum = as.character(Phylum),
+    Order = as.character(Order),
+    Family = as.character(Family)) %>%
+  arrange(Phylum, Order, Family)
+
 #pivot to wide
 heatmap_data_endo <- endo_da %>%
   select(Label_full, Condition, log2FoldChange) %>%
@@ -522,41 +591,17 @@ heatmap_data_endo <- endo_da %>%
 heatmap_data_endo <- heatmap_data_endo[,order_endo]
 colnames(heatmap_data_endo) #ok
 
-# Optional annotation (Family info)
+# Annotation (Family info)
 row_anno_endo <- endo_da %>%
-  select(Label_full, Family) %>%
+  select(Label_full, Family_simplified, Order_simplified) %>%
   distinct() %>%
   column_to_rownames("Label_full")
 
-#get vector for main families 
-main_families <- c(
-  "Burkholderiaceae", 
-  "Chitinophagaceae",
-  "Comamonadaceae",
-  "Flavobacteriaceae",
-  "Oxalobacteraceae",
-  "Rhizobiaceae",
-  "Sphingobacteriaceae",
-  "Streptomycetaceae",
-  "Xanthobacteraceae")
 
-# Replace Family with "Other" if it's not in main_families
-row_anno_endo <- row_anno_endo %>% 
-  mutate(Family = ifelse(Family %in% main_families, Family, "Other"))
-
-# select colors for factors
-#make colors for phylum with custom function
-colourCount <- length(unique(row_anno_endo$Family))
-getPalette <- colorRampPalette(brewer.pal(colourCount, "Set3"))
-
-#apply to phylum
-Family_col = getPalette(colourCount)
-Family_col <- c("#8DD3C7", "#FFFFB3", "#FB8072","#BEBADA", 
-                "#80B1D3", "#FDB462", "#B3DE69", "#FCCDE5",
-                "#A6CEE3")
-
-family_colors <- setNames(Family_col, main_families)
-family_colors["Other"] <- "#D9D9D9"
+#make vector for colors
+anno_colors <- list(
+  Family_simplified = family_colors,
+  Order_simplified = order_colors)
 
 
 # Plot heatmap
@@ -566,10 +611,10 @@ pheatmap.endo <- pheatmap(as.matrix(heatmap_data_endo),
          cluster_rows = FALSE,
          show_rownames = TRUE,
          annotation_row = row_anno_endo,
-         annotation_colors = list(Family=family_colors),
+         annotation_colors = anno_colors,
          #annotation_col = ,
-         fontsize_row = 5,
-         fontsize_col = 8,
+         fontsize_row = 7,
+         fontsize_col = 10,
          border_color = "gray",
          main = "Differential Abundance - Endosphere")
 
@@ -585,10 +630,10 @@ mapply(function(x)
   plot = last_plot(),
   filename =x,
   path = "./Plots/05_differential_abundance",
-  scale = 1.5,
-  width = 1400,
-  height = 2000,
-  units = "px",
+  scale = 1.7,
+  width = 10,
+  height = 17,
+  units = "cm",
   dpi = 300),
 x=c("Pheatmap_Endo.svg","Pheatmap_Endo.png"))
 
@@ -601,7 +646,11 @@ x=c("Pheatmap_Endo.svg","Pheatmap_Endo.png"))
 rhizo_da <- combined_da %>%
   filter(Compartment == "Soil") %>% 
   droplevels() %>% 
-  mutate(Condition = factor(Condition))
+  mutate(Condition = factor(Condition))%>%
+  mutate(Family = as.character(Family)) %>% 
+  mutate(Family_simplified = ifelse(Family %in% main_families, Family, "Other"))%>% 
+  mutate(Order= as.character(Order))%>% 
+  mutate(Order_simplified = ifelse(Order %in% main_orders, Order, "Other"))
 
 # Set desired column order
 order_rhizo <- c(
@@ -613,6 +662,14 @@ rhizo_da <- rhizo_da %>%
 
 rhizo_da <- rhizo_da %>% arrange(Family)
 
+#order by Phylum
+rhizo_da <- rhizo_da %>%
+  mutate(
+    Phylum = as.character(Phylum),
+    Order = as.character(Order),
+    Family = as.character(Family)) %>%
+  arrange(Phylum, Order, Family)
+
 #pivot to wide
 heatmap_data_rhizo <- rhizo_da %>%
   select(Label_full, Condition, log2FoldChange) %>%
@@ -623,34 +680,21 @@ heatmap_data_rhizo <- rhizo_da %>%
 heatmap_data_rhizo <- heatmap_data_rhizo[,order_rhizo]
 colnames(heatmap_data_rhizo) #ok
 
-# Optional annotation (Family info)
+# Annotation (Family info)
 row_anno_rhizo <- rhizo_da %>%
-  select(Label_full, Family) %>%
+  select(Label_full, Family_simplified, Order_simplified) %>%
   distinct() %>%
   column_to_rownames("Label_full")
 
-#get vector for main families 
-main_families <-  c(
-  "Burkholderiaceae", 
-  "Chitinophagaceae",
-  "Comamonadaceae",
-  "Flavobacteriaceae",
-  "Oxalobacteraceae",
-  "Rhizobiaceae")
+#make vector for colors (change because not all of them are there)
+anno_colors$Order_simplified <- anno_colors$Order_simplified[!names(anno_colors$Order_simplified)
+                                                             %in% c("Streptomycetales", "Sphingobacteriales")]
 
-# Replace Family with "Other" if it's not in main_families
-row_anno_rhizo <- row_anno_rhizo %>% 
-  mutate(Family = ifelse(Family %in% main_families, Family, "Other"))
+# Extraer las familias presentes en row_anno_rhizo
+families_to_keep <- unique(row_anno_rhizo$Family_simplified)
 
-# select colors for factors
-unique(row_anno_rhizo$Family)
-
-#apply to phylum
-Family_colR <- c("#8DD3C7", "#FFFFB3", "#FB8072","#BEBADA", 
-                "#80B1D3", "#FDB462")
-
-family_colorsR <- setNames(Family_colR, main_families)
-family_colorsR["Other"] <- "#D9D9D9"
+# Filtrar el vector de colores
+anno_colors$Family_simplified <- anno_colors$Family_simplified[names(anno_colors$Family_simplified) %in% families_to_keep]
 
 
 # Plot heatmap
@@ -660,7 +704,7 @@ pheatmap.rhizo <- pheatmap(as.matrix(heatmap_data_rhizo),
          cluster_rows = FALSE,
          show_rownames = TRUE,
          annotation_row = row_anno_rhizo,
-         annotation_colors = list(Family=family_colorsR),
+         annotation_colors = anno_colors,
          border_color="gray",
          fontsize_row = 8,
          fontsize_col = 8,
@@ -675,10 +719,10 @@ mapply(function(x)
   plot = last_plot(),
   filename =x,
   path = "./Plots/05_differential_abundance",
-  scale = 1.4,
-  width = 1400,
-  height = 2000,
-  units = "px",
+  scale = 1.8,
+  width = 10,
+  height = 10,
+  units = "cm",
   dpi = 300),
 x=c("Pheatmap_Rhizo.svg","Pheatmap_Rhizo.png"))
 

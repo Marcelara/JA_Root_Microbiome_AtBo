@@ -84,7 +84,7 @@ rm(list_spiec_objct)
 
 ##### 6.4 - Check fit to power law, node degree distribution, and edge weight distribution
 
- one of the best indicators for the reliability of your network is wether it fits a power law or not (many OTUs with low degree, few OTUs with high degree) while not all microbial networks will follow a power law, it is very convinient when we are looking for keystone species. we adopt this simplification even knowing it might not be a ground truth.
+one of the best indicators for the reliability of your network is wether it fits a power law or not (many OTUs with low degree, few OTUs with high degree) while not all microbial networks will follow a power law, it is very convinient when we are looking for keystone species. we adopt this simplification even knowing it might not be a ground truth.
 
 ```{r}
 
@@ -115,6 +115,7 @@ Degree_histogram_with_name(listed_igraph)
 Weight_histogram_with_name(listed_igraph)
 # *************************** Done!
 ```
+
 ##### 6.5 - Compare against a random network
 
 Our network is useless if we can't tell it apart from a random network with the same number of nodes and edges. it is OK to ahve a few metrics in a few networks that are still similar to a random network, but pay attention and record this when selecting your cut-offs
@@ -583,6 +584,9 @@ keystone_counts <- sapply(Nodes_list, function(df) {
 Nodes_BO_soil$keystone_taxa
 Nodes_BO_soil$keystone_taxa
 
+#save it as csv
+
+
 ```
 
 
@@ -635,6 +639,16 @@ rm(add_module_roles, Nodes_list, central_asv_list, central_keystone_asv_list, No
    Nodes_BO_root, Nodes_BO_soil)
 
 ```
+
+```{r}
+
+
+x <- central_keystone_asv_df %>% filter(keystone_taxa == "Keystone")
+
+```
+
+
+
 
 
 ##Edges

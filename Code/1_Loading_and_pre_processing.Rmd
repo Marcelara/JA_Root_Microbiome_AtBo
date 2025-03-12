@@ -88,8 +88,6 @@ physeq <- backup_and_rename(physeq) # this function runs slow inside the chuck b
 
 
 ### 1.1 Decontamination process
-Decontamination with the decontam package only removed a single OTU from analysis. This is because we did not have enough blank DNA extraction samples. you should use at least 3 blank samples for minimal decontamination. we continue to use this filtering regardless of it's low performance.
-
 
 ```{r}
 # Before we proceed, let's prepere phyloseq object for decontamination using the decontam package
@@ -143,7 +141,7 @@ physeq_decontaminated <- subset_samples(physeq_decontaminated, Plant_species != 
 rm(physeq_norm_df_pa, physeq_norm_pa_pos, physeq_norm_pa, physeq_norm)
 gc()
 ```
-
+Decontamination with the decontam package only removed a single OTU from analysis. 
 
 ### 1.2 Chloroplast and mitochondrial DNA removal
 Chloroplast and mitochondria DNA can be amplified by 16s primers that target bacteria. there are many approaches to reduce this problem, such as PCR blockers called PNA clamps. sometimes this is simply not enough, depending on bacterial populations and plastid DNA. A good sequencing of leaf bacterial communities can be extremely challenging due to this problem 
