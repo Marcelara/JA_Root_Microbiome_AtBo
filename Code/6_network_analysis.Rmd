@@ -26,7 +26,6 @@ source("./Code/Functions/Network_custom_functions.R") # this is a large set of c
 
 ```{r}
 
-
 # this makes one list wth 4 objects
 ps_list_unormalized <- phyloseq_sep_variable(physeq_filtered, variable = c("Plant_species", "Sample_type"))
 
@@ -642,13 +641,9 @@ rm(add_module_roles, Nodes_list, central_asv_list, central_keystone_asv_list, No
 
 ```{r}
 
-
 x <- central_keystone_asv_df %>% filter(keystone_taxa == "Keystone")
 
 ```
-
-
-
 
 
 ##Edges
@@ -798,7 +793,8 @@ all_nodes <- all_nodes %>%
 
 ```
 
-###Color management
+#Zi-Pi plot
+##Color management
 ```{r}
 
 #load full taxonomy table df
@@ -817,7 +813,7 @@ main_families <- c("Burkholderiaceae",
 #lets check to which order they belong to
 main_families_order_class <- taxonomy_table_full %>%
     filter(Family %in% main_families) %>%
-    select(Family, Order, Class) %>%
+    dplyr::select(Family, Order, Class) %>%
     distinct()  # Si hay duplicados, los elimina
 
 rownames(main_families_order_class) <- NULL #delete rownames 
@@ -844,8 +840,6 @@ Order_col <- c(
     "Chitinophagales" = "#56B4E9",        # Azul cielo
     "Sphingobacteriales" = "#009E73")      # Verde fuerte
 
-
-
 # Family colors matching the new logic
 Family_col <- c(
     "Burkholderiaceae" = "#F7A7A4",      # Burkholderiales
@@ -863,7 +857,6 @@ Family_col <- c(
 #Add gray for others
 order_colors <- c(Order_col, "Other" = "grey70")
 family_colors <- c(Family_col , "Other" = "grey70")
-
 
 ```
 
@@ -884,7 +877,7 @@ axis_looks <- theme(axis.text.x = element_text(colour = "black", size = 9,
 
 
 
-### Full plot
+## Full plot
 ```{r}
 
 #Full; also with regular nodes 
@@ -898,14 +891,17 @@ keystone_shapes <- c(
 
 #plot it 
 ggplot(all_nodes, aes(x = Zi, y = Pi,
-                      shape = Keystone_Type, fill = Family_simplified, color = Family_simplified)) +
-    geom_point(data = all_nodes %>% filter(Keystone_Type == "Other"),  # Faded regular nodes (no outline)
+                      shape = Keystone_Type,
+                      fill = Family_simplified, color = Family_simplified)) +
+    geom_point(data = all_nodes %>%
+               filter(Keystone_Type == "Other"),  # Faded regular nodes (no outline)
                aes(color = Family_simplified), 
                size = 2, alpha = 0.5) + 
-    geom_point(data = all_nodes %>% filter(Keystone_Type != "Other"), # Important-Keystone with outline
+    geom_point(data = all_nodes %>%
+                 filter(Keystone_Type != "Other"), # Important-Keystone with outline
                aes(fill = Family_simplified), 
                size = 4, color = "black", stroke = 0.3, alpha = 0.9) +  
-    geom_hline(yintercept = 0.62, linetype = "dotted", color = "gray",linewidth=0.5) +
+    geom_hline(yintercept = 0.62 , linetype = "dotted", color = "gray",linewidth=0.5) +
     geom_vline(xintercept = 2.5, linetype = "dotted", color = "gray",,linewidth=0.5) +
     labs(x = "Within-module connectivity (Zi)",
          y = "Among-module connectivity (Pi)",
@@ -920,7 +916,10 @@ ggplot(all_nodes, aes(x = Zi, y = Pi,
     axis_looks +
     theme(legend.position = "top")
 
+```
 
+Highlighting Mucilaginibacter
+```{r}
 #Now if you want to highlight Mucilinagibacter;
 mucilagi_asvs <- all_nodes %>%
     filter(Genus == "Mucilaginibacter" & Keystone_Type %in% c("Connector", "Hub", "Keystone (manual)"))
@@ -968,7 +967,7 @@ x=c("Zi_Pi.svg","Zi_Pi.png"))
 
 ```
 
-### Only keystone
+Only keystone
 ```{r}
 #plot only the keystone taxa
 # Nos quedamos solo con los nodos importantes (descartamos "Other")
@@ -1009,13 +1008,26 @@ ggplot(keystone_nodes, aes(x = Zi, y = Pi,
 
 ```
 
-Escribir leyendas
+#Venn Diagrams
+```{r}
 
-Cambiar supplementary figures (if needed)
+#let's load the list we already have with the JA-responsive ASVs per method
+important_ASV_list <- readRDS("./R output/10_summary_results/important_ASV_list.rds")
 
-Checar puntos de la discusion
+#keep only those of random forest
+na_asv_list <- important_ASV_list$NA_ASV_list
 
-Agregar referencias 
+#how many DA ASVs were per plant species and root compartment?
+sapply(na_asv_list, length)
+
+#load nVennR to make ven diagram
+library(nVennR)
+
+# Draw the Venn diagram
+venn <- plotVenn(na_asv_list, systemShow = TRUE) #this will give you an .svg file that you can save 
+
+```
+
 
 
 

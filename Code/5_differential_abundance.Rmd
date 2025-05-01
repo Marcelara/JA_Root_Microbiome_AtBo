@@ -7,7 +7,7 @@ editor_options:
   chunk_output_type: console
 ---
 
-# load libraries and data
+#Load libraries
 
 Skip if you started in the previous script 4b and just load the new packages needed for this script
 ```{r}
@@ -51,11 +51,10 @@ library(glue)
 
 ```
 
-Load data if starting from scratch, otherwise clean environment a little
+#Load data
+
+If you come from script 4b, continue here but first clean up a little. If starting from scratch, load data in line 78
 ```{r}
-
-#load("./R output/env.1_Loading_and_pre_processing.RData")
-
 #let's clean what we dont need (if you come from script 4b)
 rm(AT_asv_list, AT_asv_list.endo, BO_asv_list, BO_asv_list.endo, Neutral_plots_list_AT_Root, Neutral_plots_list_AT_Root_g,
    Neutral_plots_list_AT_soil, Neutral_plots_list_AT_soil_g, Neutral_plots_list_BO_Root, Neutral_plots_list_BO_Root_g,
@@ -76,6 +75,13 @@ gc()
 
 ```
 
+Load data if starting from scratch
+```{r}
+
+#load ps_root_soil phyloseq object. [save it later from Beta diversity script, go to line 121 here]
+
+```
+
 ##Settings for plots
 ```{r}
 #Set plots theme
@@ -91,12 +97,10 @@ axis_looks <- theme(axis.text.x = element_text(colour = "black", size = 9,
         panel.grid.minor = element_blank()) #no grid
 
 #Set colors
-color_treatments <- c("#D6D6D6", "#E6C37A", "#A65A2A", "#8BAE91") #"Control", "MeJA 0.1mM", "MeJA 1mM", "P. brassicae OS"
-color_species <- c("#5A8F8F", "#2F6B3A") #at & bo, respectively
+color_treatments <- c("#D7D7D7", "#F2C476", "#BD5A28", "#7AAF91") #"Control", "MeJA 0.1mM", "MeJA 1mM", "P. brassicae OS"
+color_species <- c("#006C3A", "#309190") #at & bo, respectively
 color_compartment <- c("#B28F45", "#846475") #endo & rhizo, respectively
 ```
-
-
 
 
 ##Deseq2 differential abundance analysis on lists of comparisons
@@ -220,10 +224,11 @@ select_listed <- do.call(c, list(Sigtab1, Sigtab2, Sigtab3)) %>% # concatenate t
 ps_list_deseq
 ps_deseq
 pairwise_comparison
+Sigtab1 #DA in MeJA 0.1
+Sigtab2 #DA in MeJA 1.0
+Sigtab3 #DA in OS
 select_listed #unique ASVs 117
-Sigtab1
-Sigtab2
-Sigtab3
+
 
 #make a list 
 DA_results_full <- list(ps_list_deseq = ps_list_deseq,
@@ -240,10 +245,13 @@ saveRDS(DA_results_full, "./R output/05_differential_abundance/DA_results_full.r
 #clean
 rm(DA_results, ps_list_deseq, ps_deseq, pairwise_comparison, Sigtab1, Sigtab2, Sigtab3, select_listed)
 
+
 ```
+
 
 #Arrange data
 ```{r}
+
 DA_results <- list(meja0.1 = DA_results_full$meja0.1,
                    meja1 = DA_results_full$meja1,
                    caterpillarOS = DA_results_full$caterpillarOS)
@@ -275,7 +283,9 @@ combined_da <- bind_rows(
   tidy_da_result(DA_results$caterpillarOS$Bo_Soil, "B. oleracea", "Soil", "Caterpillar OS"))
 
 # Optional — remove prefixes like "p__", "f__", etc., for cleaner plot labels
-clean_taxonomy <- function(x) gsub("^\\w__","",x)
+clean_taxonomy <- function(x) gsub("^\\w__","",x) #first make function
+
+#Now apply it
 combined_da <- combined_da %>%
   mutate(Phylum = clean_taxonomy(Phylum),
          Class = clean_taxonomy(Class),
@@ -304,7 +314,7 @@ combined_da <- combined_da %>%
 
 combined_da_original <- combined_da
 
-#pimp the genus names 
+#Make Label_full --> pimp the names for the heatmaps, first family then genus
 combined_da <- combined_da_original %>%
   mutate(Genus = ifelse(Genus == "Burkholderia-Caballeronia-Paraburkholderia", 
                         "Burkholderia Complex", 
@@ -313,7 +323,7 @@ combined_da <- combined_da_original %>%
                              glue("{Family} | {ASV}"),  # Case when genus is missing
                              glue("{Family} | {Genus}_{ASV}")))  # Desired format with _
 
-#lets fix the last "_"
+#lets fix the last "_" for "-"
 combined_da <- combined_da %>% mutate(Label_full = gsub("ASV_", "ASV-", Label_full)) 
 
 #check
@@ -583,7 +593,7 @@ endo_da <- endo_da %>%
 
 #pivot to wide
 heatmap_data_endo <- endo_da %>%
-  select(Label_full, Condition, log2FoldChange) %>%
+  dplyr::select(Label_full, Condition, log2FoldChange) %>%
   pivot_wider(names_from = Condition, values_from = log2FoldChange, values_fill = 0) %>%
   column_to_rownames("Label_full")
 
@@ -593,16 +603,14 @@ colnames(heatmap_data_endo) #ok
 
 # Annotation (Family info)
 row_anno_endo <- endo_da %>%
-  select(Label_full, Family_simplified, Order_simplified) %>%
+  dplyr::select(Label_full, Family_simplified, Order_simplified) %>%
   distinct() %>%
   column_to_rownames("Label_full")
-
 
 #make vector for colors
 anno_colors <- list(
   Family_simplified = family_colors,
   Order_simplified = order_colors)
-
 
 # Plot heatmap
 pheatmap.endo <- pheatmap(as.matrix(heatmap_data_endo),
@@ -672,7 +680,7 @@ rhizo_da <- rhizo_da %>%
 
 #pivot to wide
 heatmap_data_rhizo <- rhizo_da %>%
-  select(Label_full, Condition, log2FoldChange) %>%
+  dplyr::select(Label_full, Condition, log2FoldChange) %>%
   pivot_wider(names_from = Condition, values_from = log2FoldChange, values_fill = 0) %>%
   column_to_rownames("Label_full")
 
@@ -682,7 +690,7 @@ colnames(heatmap_data_rhizo) #ok
 
 # Annotation (Family info)
 row_anno_rhizo <- rhizo_da %>%
-  select(Label_full, Family_simplified, Order_simplified) %>%
+  dplyr::select(Label_full, Family_simplified, Order_simplified) %>%
   distinct() %>%
   column_to_rownames("Label_full")
 
@@ -728,6 +736,46 @@ x=c("Pheatmap_Rhizo.svg","Pheatmap_Rhizo.png"))
 
 
 ```
+
+#Venn Diagrams
+```{r}
+
+combined_da
+str(combined_da)
+
+#how many DA ASVs were per plant species and root compartment?
+unique(combined_da$ASV) #117 total unique DA ASVs overall. Matches Table 1
+
+DA_counts <- combined_da %>%
+  group_by(Species, Compartment) %>%
+  summarise(n_ASVs = n_distinct(ASV)) %>%
+  ungroup()
+
+DA_counts #81,11,29,7. A total of 128, Matches also Table 1
+
+#How many are repeated?
+combined_da %>%
+  dplyr::count(ASV) %>%
+  arrange(desc(n))
+
+library(nVennR)
+
+# Create a unique group ID combining Species and Compartment
+combined_da <- combined_da %>%
+  mutate(ASV = as.character(ASV),# Make sure ASV is character to avoid retaining factor levels
+         Group = paste(Species, Compartment, sep = "_"))
+
+# Create a list of ASVs for each group
+DA_ASVs <- combined_da %>%
+  group_by(Group) %>%
+  summarise(ASVs = list(unique(ASV))) %>%
+  deframe()
+
+# Draw the Venn diagram
+venn <- plotVenn(DA_ASVs, systemShow = TRUE) #this will give you an .svg file that you can save 
+
+```
+
 
 #Direction Log2FC summary
 ```{r}
@@ -875,22 +923,12 @@ print(taxonomy_summary)
 
 ```
 
-
-
 #Save data
 ```{r}
 
 saveRDS(combined_da, "./R output/05_differential_abundance/combined_da_df.rds")
 
 ```
-
-
-
-
-
-
-
-
 
 Differential abudance analysed! proceed to scrip 6_network analysis!
 
