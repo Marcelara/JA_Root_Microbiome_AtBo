@@ -1,4 +1,4 @@
-# Jasmonic-acid induction in Arabidopsis and Brassica shoots results in stimulation of Comamonadaceae and Rhizobiales in the rhizosphere and endosphere
+# Activation of the Jasmonic Acid Pathway in Arabidopsis and Brassica shoots enhances Comamonadaceae and Rhizobiales in the roots
 
 This repository holds the full data and code for this manuscript (auhtor names and affiliations available upon publication)
 
@@ -21,11 +21,9 @@ This research, and the public availability of the code, was funded by the Dutch 
     * follow-up with diversity indexes (Shannon, simpson and obseved richness) within every single taxonomic group
 
 ### Can I just donwload all of it and re-run locally?
-
 Yes! If you don't feel like cloning the github repository you can just download a .zip from the green "code" box above
 
-run the scripts serially as in the instructions linked [here](https://github.com/PedroBeschoren/Beschoren_Aragon_etal_2023/blob/main/Code/README.MD) R package isntallation is facilitated by the first chunk of the first script
-
+you can either run the scripts serially as in the instructions linked [here](https://github.com/PedroBeschoren/Beschoren_Aragon_etal_2023/blob/main/Code/README.MD) R package installation is facilitated by the first chunk of the first script. OR run each script independently if you are only interested in one type of analysis. 
 
 ### Suggested tutorials for key tools used in this repository
 
