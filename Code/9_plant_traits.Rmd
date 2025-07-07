@@ -45,11 +45,10 @@ library(gridExtra)
 theme_set(theme_bw())
 
 # Set colors 
-
 #colors & treatments 
-color_treatments <- c("#D7D7D7", "#F2C476", "#BD5A28", "#7AAF91") #"Control", "MeJA 0.1mM", "MeJA 1mM", "P. brassicae OS"
-color_species <- c("#006C3A", "#309190") #at & bo, respectively
-color_compartment <- c("#e7b083ff", "#905423ff") #endo & rhizo, respectively
+color_treatments <- c("#d7d7d7", "#f2c476", "#bd5a28", "#7aaf91") #"Control", "MeJA 0.1mM", "MeJA 1mM", "P. brassicae OS"
+color_species <- c("#006c3a", "#309190") #at & bo, respectively
+color_compartment <- c("#B28F45", "#846475") #endo & rhizo, respectively (not really used)
 
 # Set axis looks
 axis_looks <- theme(axis.text.x = element_text(colour = "black", size = 9,
@@ -439,9 +438,8 @@ cld.inf
 
 Significantly less with MeJA 1% compared to control and MeJA 0.1%
 
-#Joint Plot
+#Joint Plot[Fig.S2]
 ```{r}
-
 
 ggarrange(p.inf.Atha, p.dw.Bole, p.nf.Atha, p.la.Bole,
           nrow=2, ncol=2, common.legend = TRUE)
@@ -461,7 +459,6 @@ x=c("AT_BO_Traits.svg","AT_BO_Traits.png"))
 
 
 ```
-
 
 
 # Cohen's D comparison 
@@ -548,7 +545,7 @@ d_traits$trait = factor(d_traits$trait,
 
 ```
 
-### Plots  
+### Plots[Fig.1a]  
 
 Followed this: https://stackoverflow.com/questions/58657802/forest-plot-with-subgroups-in-ggplot2 
 
@@ -572,7 +569,7 @@ d_traits$treatment <- factor(d_traits$treatment, levels = c("oral_secretion", "M
 
 
 #settings for plots 
-color_treatments_noControl <- c("#7AAF91",  "#BD5A28", "#F2C476")
+color_treatments_noControl <- c("#7aaf91", "#bd5a28", "#f2c476")
 names_treatments_noControl <- c(c("MeJA_0.1" = "0.1 mM \n MeJA", "MeJA_1.0" = "1 mM \n MeJA", "oral_secretion"="P. brassicae \n OS"))
 
 #plot
@@ -598,7 +595,7 @@ p.cohensD <- ggplot(data = d_traits,
 
 p.cohensD 
 
-#save plot
+#save plot [Figure 1a]
 mapply(function(x)
   ggsave(
   plot = last_plot(),
@@ -616,7 +613,20 @@ x=c("AT_BO_CohenD.svg","AT_BO_CohenD.png"))
 
 ```
 
+#Save data
+```{r}
 
+#[MA] Let's save the environment 
+save.image("./R output/env.9_plant_traits.RData")
+
+#[MA] Now let's clean what we don't need for next script 7-Random Forest
+rm(list = ls())
+
+```
+
+
+
+The end! :)
 
 
 
