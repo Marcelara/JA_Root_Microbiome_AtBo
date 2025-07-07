@@ -7,9 +7,11 @@ editor_options:
   chunk_output_type: console
 ---
 
-# load libraries and data
-```{r}
+#General settings
+##load libraries
 
+[MA]: Load only packages that you'll need in this script
+```{r}
 #Set working directory to project directory 
 setwd("./")
 getwd() #ok
@@ -44,13 +46,12 @@ library("car")  # for Levene's test
 
 ```
 
-Now, get the data from script 1
+## Load data
+[MA]: Now, get the data from script 1, only the ps list that you need 
 ```{r}
 
-load("./R output/env.1_Loading_and_pre_processing.RData")
-
-#remove all that you dont need
-rm(CSS_matrix, decontam_output, MRexp_objt, physeq, physeq_clean, physeq_decontaminated, physeq_norm_pa_neg)
+#Load 'normalization_listed', a ps list with CSS, rarefied and non-rarefied
+normalization_listed <- readRDS("./R output/01_phyloseq_objects/normalization_listed.rds")
 
 #Check ps objects
 normalization_listed$physeq_filtered #original ps, non-normalized, full dataset, same as physeq_filtered
@@ -65,7 +66,7 @@ Let's get the summary of reads in the raw phyloseq
 # Add new variable 'Sp' as a short name for species
 normalization_listed <- lapply(normalization_listed, function(ps){
                         # Add new column 'Sp' with short species names
-              sample_data(ps)$Sp <- ifelse(sample_data(ps)$Plant_species == "Arabidopsis_thaliana", "At",
+                        sample_data(ps)$Sp <- ifelse(sample_data(ps)$Plant_species == "Arabidopsis_thaliana", "At",
                                           ifelse(sample_data(ps)$Plant_species == "Brassica_oleraceae", "Bo", NA))
 
                         # Check the first few rows
@@ -103,8 +104,13 @@ normalization_listed <- lapply(normalization_listed, function(ps){
 
 #let's check sample_data
 lapply(normalization_listed, function(ps){head(sample_data(ps))})
+```
 
-#split it to get number of ASVs per sub-community
+[MA]: Let's split it by Plant Species and Root compartment. 
+In the metadata 'Root' is Endosphere and 'Soil' is actually Rhizosphere. 
+```{r}
+
+#split it by Species and Root community to get number of ASVs per sub-community
 ps_root_soil <- phyloseq_sep_variable(normalization_listed$physeq_filtered, variable = "Sp_Comp")
 
 #get summary
@@ -118,12 +124,13 @@ sample_data <- normalization_listed$physeq_filtered %>%
 sample_data %>% 
     group_by(Sp, Sample_type)%>%
     dplyr::summarise(Replicates = n(),
-              library_size = mean(library_size),
-              stdev_libsize =sd(library_size, na.rm = TRUE))
+              mean_library_size = mean(library_size),
+              stdev_libsize =sd(library_size))
 
 ```
 
 ## Settings for plots 
+[MA]: Load general settings for plots (axis, treatment colors, etc)
 ```{r}
 
 #Set plots theme
@@ -139,12 +146,11 @@ axis_looks <- theme(axis.text.x = element_text(colour = "black", size = 9,
         panel.grid.minor = element_blank()) #no grid
 
 #Set colors
-color_treatments <- c("#D6D6D6", "#E6C37A", "#A65A2A", "#8BAE91") #"Control", "MeJA 0.1mM", "MeJA 1mM", "P. brassicae OS"
-color_species <- c("#5A8F8F", "#2F6B3A") #at & bo, respectively
-color_compartment <- c("#B28F45", "#846475") #endo & rhizo, respectively
+color_treatments <- c("#d7d7d7", "#f2c476", "#bd5a28", "#7aaf91") #"Control", "MeJA 0.1mM", "MeJA 1mM", "P. brassicae OS"
+color_species <- c("#006c3a", "#309190") #at & bo, respectively
+color_compartment <- c("#B28F45", "#846475") #endo & rhizo, respectively (not really used)
 
 ```
-
 
 
 # 2.0 - basic beta diversity analysis
@@ -153,7 +159,6 @@ On this script we will evaluate beta diversity - the differences in the microbia
 
 ## 2.1 - Beta Diversity plots
 Beta diversity plots are the beating heart or microbiome analysis. here you will be able to visually tell if communities differ according to treatment or not. It can be a very long topic but here I only use one option.
-
 
 ```{r}
 
@@ -172,7 +177,7 @@ df_info <- sample_data(normalization_listed$physeq_filtered_CSS) %>%
                dplyr::select(Plant_species, Sample_type, Sp_Comp, MeJA_treatment)%>%
                mutate(sample_name=rownames(.))
 
-#call function
+#[MA] call function to get coordenates 
 get_NMDS_coordenates <- function(x,y){
   
   #x is a phyloseq
@@ -193,18 +198,22 @@ get_NMDS_coordenates <- function(x,y){
 }
 
 
-#get coordinates
+#[MA] get coordinates
 df_NMDS <- get_NMDS_coordenates(normalization_listed$physeq_filtered_CSS, "bray")
 df_NMDS <- df_NMDS[[1]] #it was a list before idk why
+str(df_NMDS)
 
-df_NMDS$Sample_type
-df_NMDS$Plant_species
+df_NMDS$Plant_species <- as.factor(df_NMDS$Plant_species) #change it to factor
+
+#Check order
+df_NMDS$Sample_type #Order: Endo and Rhizo
+df_NMDS$Plant_species #Order: At and Bo
 
 #plot NMDS 
 ggplot(df_NMDS, aes(x=NMDS1,y=NMDS2, 
                     fill=MeJA_treatment, #inside
                     shape=Plant_species,
-                    color=Sample_type)) + #outline
+                    color=Sample_type)) + #outline for root compartment
   geom_point(aes(color=Sample_type, fill=MeJA_treatment), size=5)+ # individual sample values
   scale_shape_manual(values=c(21,24))+ #cirle At, Triangle Bo
   scale_color_manual(values = c("white", "black"))+ #white is endo, black rhizo
@@ -214,7 +223,7 @@ ggplot(df_NMDS, aes(x=NMDS1,y=NMDS2,
   theme(legend.position = "none")
   
 
-#save plot
+#[MA]save plot; Figure 1B
 mapply(function(x)
   ggsave(
   plot = last_plot(),
@@ -257,18 +266,18 @@ get_NMDS_coordenates <- function(x,y){
   return(df_nmds)
 }
 
-#get coordinates with lapply
+#[MA] get coordinates with lapply
 df_NMDS_split <- lapply(ps_list_CSS2, function(ps){
           df <- get_NMDS_coordenates(ps, "bray")
           df <- df[[1]]
           return(df)})
 
-#Now, get centroids 
+#[MA] Now, get centroids 
 centroids <- lapply(df_NMDS_split, function(df){
   df <- aggregate(cbind(NMDS1, NMDS2) ~ MeJA_treatment, data=df, FUN=mean)
   return(df)})
 
-#Finally, get full df to be able to draw segments for this use mapply to go over two lists
+#[MA] Finally, get full df to be able to draw segments for this use mapply to go over two lists
 df_NMDS_split_full <- mapply(function(df_NMDS_split, centroid_df) {
   merge(df_NMDS_split, centroid_df,
         by = "MeJA_treatment", all.x = TRUE, suffixes=c("", "_centroid"))},
@@ -278,7 +287,6 @@ df_NMDS_split_full <- lapply(df_NMDS_split_full, function(list){ as.data.frame(l
   
 
 #Now, plot the NMDS, one per Sp-Root
-
 AT_Endo <- ggplot(df_NMDS_split_full$At_Root, aes(x=NMDS1,y=NMDS2, 
                     fill=MeJA_treatment,
                     color=MeJA_treatment)) + #outline
@@ -294,6 +302,8 @@ AT_Endo <- ggplot(df_NMDS_split_full$At_Root, aes(x=NMDS1,y=NMDS2,
   ggtitle("AT_Endo")+
   axis_looks+
   theme(legend.position = "none")
+
+AT_Endo
 
 
 BO_Endo <- ggplot(df_NMDS_split_full$Bo_Root, aes(x=NMDS1,y=NMDS2, 
@@ -312,6 +322,8 @@ BO_Endo <- ggplot(df_NMDS_split_full$Bo_Root, aes(x=NMDS1,y=NMDS2,
   axis_looks+
   theme(legend.position = "none")
 
+BO_Endo 
+
 
 AT_Rhizo <- ggplot(df_NMDS_split_full$At_Soil, aes(x=NMDS1,y=NMDS2, 
                     fill=MeJA_treatment,
@@ -328,6 +340,8 @@ AT_Rhizo <- ggplot(df_NMDS_split_full$At_Soil, aes(x=NMDS1,y=NMDS2,
   ggtitle("AT_Rhizo")+
   axis_looks+
   theme(legend.position = "none")
+
+AT_Rhizo
 
 
 BO_Rhizo <- ggplot(df_NMDS_split_full$Bo_Soil, aes(x=NMDS1,y=NMDS2, 
@@ -346,11 +360,13 @@ BO_Rhizo <- ggplot(df_NMDS_split_full$Bo_Soil, aes(x=NMDS1,y=NMDS2,
   axis_looks+
   theme(legend.position = "none")
 
+BO_Rhizo 
 
-#Make it a single figure 
+
+#[MA] Make it a single figure 
 ggarrange(AT_Endo, BO_Endo, AT_Rhizo, BO_Rhizo, ncol=4)
 
-#save plot
+#[MA] Save plot
 mapply(function(x)
   ggsave(
   plot = last_plot(),
@@ -425,12 +441,28 @@ beta_disp_plotAndTest <- function(phyloseq_list, group) {
   return(list(bet_disp_PCOa_plot, bet_disp_boxplot))
 }
 
-# now that we have a custom function, we can run it across all lists and variables
-set.seed(5235)
-dip_result3 <- beta_disp_plotAndTest(ps_list_CSS, "MeJA_treatment")
 ```
 
 
+
+```{r}
+
+#[MA] As PERMANOVA will be donde in CSS-normalized data, split the phyloseq of physeq_filtered_CSS by Species and Root community #In old code this was the same as ps_list_CSS
+#Now changed in this way as phyloseq_sep_variable doesn't accept anymore to split by two variables, now it has to be 1
+#therefore changed from phyloseq_sep_variable(ps, variable = c("Plant_species", "Sample_type")) to 
+#phyloseq_sep_variable(ps, variable = "Sp_Comp"), which is exactly the same 
+
+ps_list_CSS <- phyloseq_sep_variable(normalization_listed$physeq_filtered_CSS, variable = "Sp_Comp")
+
+
+# now that we have a custom function, we can run it across all lists and variables
+set.seed(5235)
+dip_result3 <- beta_disp_plotAndTest(ps_list_CSS, "MeJA_treatment")
+
+#check
+dip_result3 #all passed
+
+```
 
 
 ## 2.3 - Run PERMANOVA 
@@ -441,29 +473,35 @@ A permutation anova will tell if the differences in the microbial community stru
 you will need to run, test and check several different models and data slices to have final insight into the dataset you are evaluating. get used with testing multiple models!
 
 ```{r}
+
+#[MA] Check it in the non-split ps that is normalized by CSS 
+physeq_filtered_CSS <- normalization_listed$physeq_filtered_CSS
+
 # Running the permanova with vegan::adonis2() on a single phyloseq object is very simple
 metadata <- as(sample_data(physeq_filtered_CSS), "data.frame")
 
 # let's first define permitation design with permute::how()
 perm2 <- how(
   within = Within(type = "free"), # permute observations freely within the blocks. got to ask Fred how to handle grid arrangements!
-  #blocks = metadata$Block, # define blocks
+  #blocks = metadata$Block, # define blocks, silenced as it doesn't change the output
   nperm = 999
 ) # n of permutations
 set.seed(5235)
 
-# now let's calculate the permanova
+# now let's calculate the permanova in the full ps 
 three_way_permanova <- adonis2(phyloseq::distance(t(otu_table(physeq_filtered_CSS)), method = "bray") # this is your distance matrix of OTU abundances
 ~ MeJA_treatment * Plant_species * Sample_type, # this is your model
 permutations = perm2, # we jsut defined the permutation settings above, you place them here
 data = metadata
 ) # metadata for the community matrix
 
+#check
+three_way_permanova #[This is Table S2]
 
 
 #### -------- soft-coded, 3 lists of phyloseq objects with 1 formula ---###
 
-# let's check now if sample type differ per species. note that this function uses Blocks as strata
+# let's check now if sample type differ per species
 permanova_with_list <- function(phyloseq_list, rhs_model) {
   # phyloseq_list = list of phyloseq objects
   # RHS_model = right hand side model, such as MeJA_treatment*Sample_type
@@ -473,7 +511,8 @@ permanova_with_list <- function(phyloseq_list, rhs_model) {
     form <- as.formula(paste("lhs_data~", paste(rhs_model_in))) # getting the formulat properly evaluated as custom string is tricky
     output <- adonis2(form,
       data = as(sample_data(x), "data.frame"), # changing with as.data.frame is insufficient
-      permutations = how(within = Within(type = "free"), blocks = as(sample_data(x), "data.frame")$Block, nperm = 9999)
+      permutations = how(within = Within(type = "free"),
+                         blocks = as(sample_data(x), "data.frame")$Block, nperm = 9999) #[MA]permutations within blocks
     ) # how defines the permutations, it is important to adjust it to the experimental design such as a time series
     return(output)
   })
@@ -485,12 +524,9 @@ perm_by4 <- permanova_with_list(ps_list_CSS, "MeJA_treatment")
 perm_by4 <- lapply(perm_by4, function(perm){as.data.frame(perm)})
 
 
-#get df
-library(dplyr)
-library(tidyr)
-library(purrr)
+#[MA] get df
 
-# Function to tidy one PERMANOVA table (add sample source as a column)
+# [MA]Function to tidy one PERMANOVA table (add sample source as a column)
 extract_perm_table <- function(perm_table, sample_name) {
   perm_table %>%
     as.data.frame() %>%
@@ -498,21 +534,18 @@ extract_perm_table <- function(perm_table, sample_name) {
     mutate(Sample = sample_name)
 }
 
-# Apply the function to each element in the list
+#[MA] Apply the function to each element in the list
 combined_perm <- map2_df(perm_by4, names(perm_by4), extract_perm_table)
 
-#plit 'Sample' into Plant_species and Compartment
+#[MA] Split 'Sample' into Plant_species and Compartment
 combined_perm <- combined_perm %>%
-  separate(Sample, into = c("Plant_species", "Compartment"), sep = "\\.")
+  separate(Sample, into = c("Plant_species", "Compartment"), sep = "\\_")
 
-# Final combined table
+#[MA] Final combined table [This is Table S3]
 print(combined_perm)
 
-# copy to clipboard for pasting into Excel
+#[MA] copy to clipboard for pasting into Excel
 write.table(combined_perm, "clipboard", sep = "\t", row.names = FALSE)
-
-
-
 
 
 ```
@@ -523,7 +556,6 @@ write.table(combined_perm, "clipboard", sep = "\t", row.names = FALSE)
 save.image("./R output/env.2_beta_diversity.RData")
 
 ```
-
 
 Beta Diversity analysed! proceed to scrip 3_Alpha_Diversity!
 
