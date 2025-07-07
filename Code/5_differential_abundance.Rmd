@@ -7,9 +7,11 @@ editor_options:
   chunk_output_type: console
 ---
 
-#Load libraries
+#General Settings
 
-Skip if you started in the previous script 4b and just load the new packages needed for this script
+## Load libraries
+[MA]: Load only packages that you'll need in this script
+Skip if you started in the previous script 3_alpha diversity and just load the new packages needed for this script (end of this chunk)
 ```{r}
 #Set working directory to project directory 
 setwd("./")
@@ -49,36 +51,33 @@ library(pheatmap)
 library(ComplexHeatmap)
 library(glue)
 
-```
 
-#Load data
-
-If you come from script 4b, continue here but first clean up a little. If starting from scratch, load data in line 78
-```{r}
-#let's clean what we dont need (if you come from script 4b)
-rm(AT_asv_list, AT_asv_list.endo, BO_asv_list, BO_asv_list.endo, Neutral_plots_list_AT_Root, Neutral_plots_list_AT_Root_g,
-   Neutral_plots_list_AT_soil, Neutral_plots_list_AT_soil_g, Neutral_plots_list_BO_Root, Neutral_plots_list_BO_Root_g,
-   Neutral_plots_list_BO_soil, Neutral_plots_list_BO_soil_g, Venn_AT, Venn_BO, plot_alpha_BySample, export_venn, dip_result_AT,
-   dip_result_BO)
-
-rm(tx, dist.mat, predictions_listed_AT_Root, predictions_listed_AT_soil, predictions_listed_BO_Root, predictions_listed_BO_soil,
-   neutral_list_AT_Root, neutral_list_AT_soil, neutral_list_BO_Root, neutral_list_BO_soil, fitstats_listed_AT_Root, fit_class_ps_list_AT_soil,
-   fit_class_ps_list_BO_Root, fit_class_ps_list_BO_soil)
-
-rm(fitstats_listed_AT_soil, fitstats_listed_BO_Root, fitstats_listed_BO_soil, BO_4_model_above, BO_4_model_asPredicted, BO_4_model_below,
-   AT_Root_predicted_list, AT_soil_predicted_list, BO_Root_predicted_list, BO_soil_predicted_list, fit_class_ps_list_AT_Root, list_tibble,
-   named_tibble_list_AT, named_tibble_list_BO, sample_data_df)
-
-rm(ps_list_neutral_AT_Root, ps_list_neutral_AT_soil, ps_list_neutral_BO_Root, ps_list_neutral_BO_soil)
-
-gc()
+library(ggplotify) #to convert pheatmap to ggplot object
+library(nVennR) #To plot VennDiagrams
 
 ```
 
-Load data if starting from scratch
+##Load data
+
+[MA] If you come from script 3_alpha diversity and have 'normalization_listed' in your environment, skip to next chunk
+If not, load it 
 ```{r}
 
-#load ps_root_soil phyloseq object. [save it later from Beta diversity script, go to line 121 here]
+#Load 'normalization_listed', a ps list with CSS, rarefied and non-rarefied
+normalization_listed <- readRDS("./R output/01_phyloseq_objects/normalization_listed.rds")
+
+```
+
+[MA] Split phyloseq by Plant Species and Root compartment from non-rarified data
+```{r}
+
+normalization_listed$physeq_filtered #non-rarefied ps 
+
+#let's make it a single ps
+physeq_filtered <- normalization_listed$physeq_filtered
+
+#Split by Species and Root Compartment, let's name it ps_list_nonraref to match Pedro's code 
+ps_list_nonraref <- phyloseq_sep_variable(physeq_filtered, variable = "Sp_Comp") #ok
 
 ```
 
@@ -97,37 +96,37 @@ axis_looks <- theme(axis.text.x = element_text(colour = "black", size = 9,
         panel.grid.minor = element_blank()) #no grid
 
 #Set colors
-color_treatments <- c("#D7D7D7", "#F2C476", "#BD5A28", "#7AAF91") #"Control", "MeJA 0.1mM", "MeJA 1mM", "P. brassicae OS"
-color_species <- c("#006C3A", "#309190") #at & bo, respectively
-color_compartment <- c("#B28F45", "#846475") #endo & rhizo, respectively
+color_treatments <- c("#d7d7d7", "#f2c476", "#bd5a28", "#7aaf91") #"Control", "MeJA 0.1mM", "MeJA 1mM", "P. brassicae OS"
+color_species <- c("#006c3a", "#309190") #at & bo, respectively
+color_compartment <- c("#B28F45", "#846475") #endo & rhizo, respectively (not really used)
+
 ```
 
 
-##Deseq2 differential abundance analysis on lists of comparisons
+#Deseq2 differential abundance analysis on lists of comparisons
 The use of lists in this analysis greatly reduces the amount of hard code. if running this for the first time, read carefully about the use of deseq2 for amplicon data. Each dataset may need tweaks on the selected p levels or minimal fold changes; for that you will edit build_sig_tab()
 
 
 base tutorial used here: https://joey711.github.io/phyloseq-extensions/DESeq2.html
 heatmap for final plot: http://rstudio-pubs-static.s3.amazonaws.com/288398_185f2889a5f641c6b9aa7b14fa15b635.html
 
-###Create deseq2 object
+##Create deseq2 object
 This will be the bulk of the calculations and can take a moment
 
 ```{r}
 #ps_list_nonraref <- phyloseq_sep_variable(physeq_filtered, variable = c("Plant_species", "Sample_type")) # this makes one list wth 4 NON-RAREFIED objects
-#[MA 28-02-25; for now the function phyloseq_sep_variable doesnt work when given 2 variables,
-#instead use the `ps_root_soil` object that is already the physeq_filtered splited by 4: Script 2_beta_diversity, line 108]
+#[MA] 28-02-25; for now the function phyloseq_sep_variable doesnt work when given 2 variables,
+#[MA] instead use the new `ps_list_nonraref` object that we just made in line 73
 
-ps_root_soil 
-ps_root_soil <- lapply(ps_root_soil, function(ps){ prune_taxa(taxa_sums(ps) > 0, ps)}) #just checking if all aASVs with 0 reads were removed, yes.
+ps_list_nonraref
+ps_list_nonraref <- lapply(ps_list_nonraref, function(ps){ prune_taxa(taxa_sums(ps) > 0, ps)}) #just checking if all aASVs with 0 reads were removed, yes.
 
-#change name so it matches the code from Pedro
-ps_list_nonraref <- ps_root_soil
-
-# make list of deseqed phyloseq objects
+# make list of deseqed phyloseq objects [MA]: by Species and Root Compartment 
 ps_list_deseq <- lapply(ps_list_nonraref, function(x) phyloseq_to_deseq2(x, ~MeJA_treatment))
 ps_list_deseq <- lapply(ps_list_deseq, function(x) DESeq(x, test = "Wald", fitType = "parametric"))
 
+
+#[MA] Also run Deseq in full phyloseq (unsplit ps physeq_filtered)
 # this unlisted, unsplit deseq2 object will be necessary to construct the heatmap (Deseq in full community)
 ps_deseq <- phyloseq_to_deseq2(physeq_filtered, ~MeJA_treatment)
 ps_deseq <- DESeq(ps_deseq, test = "Wald", fitType = "parametric")
@@ -137,11 +136,11 @@ ps_deseq <- DESeq(ps_deseq, test = "Wald", fitType = "parametric")
 pairwise_comparison <- list(
   c("MeJA_treatment", "MeJA_0.1", "control"),
   c("MeJA_treatment", "MeJA_1.0", "control"),
-  c("MeJA_treatment", "oral_secretion", "control")
-)
+  c("MeJA_treatment", "oral_secretion", "control"))
+
 ```
 
-###Make the pairwise comparisons
+##Make the pairwise comparisons
 These comparisons will be based on the data splits and the pairwise_comparison list you generated in the previous chunk
 
 ```{r}
@@ -176,8 +175,6 @@ build_sig_tab <- function(deseq_list, contrast_cha_vector) {
   # max_OTU_n<-1:3 # defines the maximum number of OTUs to include in each pairwise coparison
   # list_sigtab <- lapply(list_sigtab, function (x)
   # x[max_OTU_n,])  # cuts results based on maximum numer of OTUs counted as differential
-
-
 
   list_sigtab <- lapply(list_sigtab, function(x) {
     cbind(as(x, "data.frame"), as(tax_table(physeq_filtered)[rownames(x), ], "matrix"))
@@ -214,21 +211,25 @@ select_listed <- do.call(c, list(Sigtab1, Sigtab2, Sigtab3)) %>% # concatenate t
   lapply(function(x) rownames(x)) %>% # extract the rownames from the list, then....
   unlist(use.names = FALSE) %>% # flatten the rowname (OTU ID) list, ignoring the names of the lists, then...
   unique() # remove duplications of the same OTUs
+
+#[MA]: list of ASVs that were DA
+select_listed 
+
 ```
 
-#Save DA output
-
+##Save DA output
+[MA] let's save the output of DA analysis so it can be easier re-used for plotting and for Summary Results
+without having to re-run deseq
 ```{r}
 
 # Example assuming you have one significance table (adjust if you have a list of them)
-ps_list_deseq
-ps_deseq
-pairwise_comparison
+ps_list_deseq #deseq By Sp and Root 
+ps_deseq #deseq full
+pairwise_comparison #vector with pairwise comparisons name
 Sigtab1 #DA in MeJA 0.1
 Sigtab2 #DA in MeJA 1.0
 Sigtab3 #DA in OS
-select_listed #unique ASVs 117
-
+select_listed #unique DA ASVs 117
 
 #make a list 
 DA_results_full <- list(ps_list_deseq = ps_list_deseq,
@@ -243,29 +244,33 @@ DA_results_full <- list(ps_list_deseq = ps_list_deseq,
 saveRDS(DA_results_full, "./R output/05_differential_abundance/DA_results_full.rds")
 
 #clean
-rm(DA_results, ps_list_deseq, ps_deseq, pairwise_comparison, Sigtab1, Sigtab2, Sigtab3, select_listed)
+rm(ps_list_deseq, ps_deseq, pairwise_comparison, Sigtab1, Sigtab2, Sigtab3, select_listed)
 
 
 ```
 
+#Log2FC Plot [Fig.2a]
 
-#Arrange data
+##Arrange data
+[MA] First arrange data to make Log2Fold change plot [Figure 2a]
+
+[MA] Let's create a clean DF
 ```{r}
 
+#[MA] let's make new list with DA ASVs per pairwise comparison
 DA_results <- list(meja0.1 = DA_results_full$meja0.1,
                    meja1 = DA_results_full$meja1,
-                   caterpillarOS = DA_results_full$caterpillarOS)
+                   caterpillarOS = DA_results_full$caterpillarOS) 
 
-# Function to tidy one subcommunity result (e.g., At_Root)
+#[MA] Function to tidy one subcommunity result (e.g., At_Root)
 tidy_da_result <- function(da_result, species, compartment, treatment) {
   da_result %>%
     rownames_to_column(var = "ASV") %>%
     mutate(Species = species,
            Compartment = compartment,
-           Treatment = treatment)
-}
+           Treatment = treatment)}
 
-# Combine all DA results into one dataframe
+#[MA] Combine all DA results into one dataframe, hard-coded
 combined_da <- bind_rows(
   tidy_da_result(DA_results$meja0.1$At_Root, "A. thaliana", "Root", "meJA 0.1mM"),
   tidy_da_result(DA_results$meja0.1$At_Soil, "A. thaliana", "Soil", "meJA 0.1mM"),
@@ -282,10 +287,14 @@ combined_da <- bind_rows(
   tidy_da_result(DA_results$caterpillarOS$Bo_Root, "B. oleracea", "Root", "Caterpillar OS"),
   tidy_da_result(DA_results$caterpillarOS$Bo_Soil, "B. oleracea", "Soil", "Caterpillar OS"))
 
-# Optional — remove prefixes like "p__", "f__", etc., for cleaner plot labels
+#[MA] check
+combined_da
+
+#[MA] Optional — remove prefixes like "p__", "f__", etc., for cleaner plot labels
+#[MA] Make function for this 
 clean_taxonomy <- function(x) gsub("^\\w__","",x) #first make function
 
-#Now apply it
+#[MA] Now apply it
 combined_da <- combined_da %>%
   mutate(Phylum = clean_taxonomy(Phylum),
          Class = clean_taxonomy(Class),
@@ -293,121 +302,127 @@ combined_da <- combined_da %>%
          Family = clean_taxonomy(Family),
          Genus = clean_taxonomy(Genus))
 
-# Set ASV order (optional) to have most important ASVs on top
+#[MA] Set ASV order (optional) to have most important ASVs on top
 asv_order <- combined_da %>%
   group_by(ASV) %>%
   summarise(max_abs_lfc = max(abs(log2FoldChange))) %>%
   arrange(-max_abs_lfc) %>%
   pull(ASV)
 
-combined_da$ASV <- factor(combined_da$ASV, levels = asv_order)
+combined_da$ASV <- factor(combined_da$ASV, levels = asv_order) #re-order
 
-#make new label with ASV and family info
+#[MA] make new label with ASV and family info (for heatmaps)
 combined_da <- combined_da %>%
   mutate(ASV_Label = paste0(ASV, " (", Family, ")"))
 
-combined_da$ASV_Label <- factor(combined_da$ASV_Label, levels = unique(combined_da$ASV_Label[order(match(combined_da$ASV, asv_order))]))
+combined_da$ASV_Label <- factor(combined_da$ASV_Label,
+                         levels = unique(combined_da$ASV_Label[order(match(combined_da$ASV, asv_order))]))
 
-#add the combination of all of the treatments 
+#[MA] add the combination of all of the treatments 
 combined_da <- combined_da %>%
   mutate(Condition = paste(Species, Compartment, Treatment, sep = "-"))
 
-combined_da_original <- combined_da
+combined_da_original <- combined_da #save it to check later
+```
 
-#Make Label_full --> pimp the names for the heatmaps, first family then genus
+[MA] Let's fix some names so they dont appear that long and create new column named Label_Full with Family and Genus information in one, as well as ordered by Phylum-Family
+```{r}
+#[MA] Make Label_full 
+#[MA]: pimp the names for the heatmaps, first family then genus
+
 combined_da <- combined_da_original %>%
   mutate(Genus = ifelse(Genus == "Burkholderia-Caballeronia-Paraburkholderia", 
-                        "Burkholderia Complex", 
+                        "Burkholderia Complex", #change name so its not that long
                         Genus)) %>%
   mutate(Label_full = ifelse(is.na(Genus) | Genus == "", 
-                             glue("{Family} | {ASV}"),  # Case when genus is missing
+                             glue("{Family} | {ASV}"),  # Case when genus is missing, replace with ASV name
                              glue("{Family} | {Genus}_{ASV}")))  # Desired format with _
 
-#lets fix the last "_" for "-"
+#[MA] lets fix the last "_" for "-"
 combined_da <- combined_da %>% mutate(Label_full = gsub("ASV_", "ASV-", Label_full)) 
 
-#check
+#[MA] check
 head(combined_da) #ok 
 
-#check
+#[MA] check
 combined_da$Condition #ok
 
-#re-order Taxonomy so they appear in order of "importance" Phylum-Order-Family
+#[MA] re-order Taxonomy so they appear in order of "importance" Phylum-Order-Family
 library(forcats)
 library(dplyr)
 
-# Count ASVs per Phylum-Order-Family combination
+#[MA] Count ASVs per Phylum-Order-Family combination
 taxonomy_counts <- combined_da %>%
   dplyr::count(Phylum, Order, Family)
+taxonomy_counts
 
-# Order Phylum by total ASVs
+#[MA] Order Phylum by total ASVs
 phylum_order <- taxonomy_counts %>%
   group_by(Phylum) %>%
   summarise(n = sum(n)) %>%
   arrange(desc(n)) %>%
   pull(Phylum)
 
-# Order Order within each Phylum by total ASVs
+#[MA] Order Order within each Phylum by total ASVs
 #order_order <- taxonomy_counts %>%
 #  group_by(Phylum, Order) %>%
 #  summarise(n = sum(n)) %>%
 #  arrange(match(Phylum, phylum_order), desc(n)) %>%
 #  pull(Order)
 
-# Order Order alphabetically within each Phylum
+#[MA] Order Order alphabetically within each Phylum
 order_order <- taxonomy_counts %>%
   distinct(Phylum, Order) %>%
   arrange(match(Phylum, phylum_order), Order) %>%
   pull(Order)
 
-# Order Family within each Order by total ASVs
+#[MA]  Order Family within each Order by total ASVs
 #family_order <- taxonomy_counts %>%
 #  arrange(match(Phylum, phylum_order), 
 #          match(Order, order_order), 
 #          desc(n)) %>%
 #  pull(Family)
 
-#Alphabetically within each order
+#[MA] Order Family Alphabetically within each order
 family_order <- taxonomy_counts %>%
   distinct(Family, Order) %>%
   arrange(match(Order, order_order), Family) %>%
   pull(Family)
 
-#check
+#[MA] check
 phylum_order
 order_order
 family_order
 
-#re-order data frame for plotting
+#[MA] re-order data frame for plotting
 combined_da <- combined_da %>%
   mutate(Phylum = factor(Phylum, levels = phylum_order),
          Order = factor(Order, levels = order_order),
          Family = factor(Family, levels = family_order)) %>%
   arrange(Phylum, Order, Family)
 
-#order Treatments as well 
+#[MA] order Treatments as well 
 combined_da  <- combined_da  %>% mutate(Treatment= factor(Treatment,
                                  levels = c("meJA 0.1mM", "meJA 1mM", "Caterpillar OS")))
-#check
+#[MA] check
 head(combined_da)
 combined_da$Treatment
 
-#let's save it 
+#[MA] let's save it 
 saveRDS(combined_da, "./R output/05_differential_abundance/combined_da_df.rds")
 
 ```
 
+## Plots
 
-#Log2fold change plot
-
-##Endo
+###Endo
 ```{r}
 
-#asign colors
+#[MA] asign colors
 color_JAtreatments <- tail(color_treatments, 3) #without control color
 names(color_JAtreatments) <- c("meJA 0.1mM", "meJA 1mM", "Caterpillar OS")
 
-#plot it
+#[MA] plot it
 ggplot(subset(combined_da, Compartment == "Root"),
        aes(x = Family, y = log2FoldChange, fill = Treatment)) +
    geom_point(aes(fill=Treatment), shape=21, color="black", stroke = 0.3,
@@ -421,7 +436,7 @@ ggplot(subset(combined_da, Compartment == "Root"),
   axis_looks+
   theme(axis.text.x = element_text(colour = "black", size = 10,
                                    face = "bold", angle=90, hjust=1))
-
+#[MA] save it 
 mapply(function(x)
   ggsave(
   plot = last_plot(),
@@ -436,8 +451,10 @@ x=c("log2_Endo.svg","log2_Endo.png"))
 
 ```
 
-##Rhizo
+###Rhizo
 ```{r}
+
+#[MA] Plot it
 ggplot(subset(combined_da, Compartment == "Soil"),
        aes(x = Family, y = log2FoldChange, fill = Treatment)) +
    geom_point(aes(fill=Treatment), shape=21, color="black", stroke = 0.3,
@@ -452,6 +469,7 @@ ggplot(subset(combined_da, Compartment == "Soil"),
   theme(axis.text.x = element_text(colour = "black", size = 10,
                                    face = "bold", angle=90, hjust=1))
 
+#[MA] Save it 
 mapply(function(x)
   ggsave(
   plot = last_plot(),
@@ -466,9 +484,10 @@ x=c("log2_Rhizo.svg","log2_Rhizo.png"))
 
 ```
 
-##Full
+### Full [Fig.2a]
 ```{r}
 
+#[MA] Plot it
 ggplot(combined_da,
        aes(x = Family, y = log2FoldChange, fill = Treatment)) +
    geom_point(aes(fill=Treatment), shape=21, color="black", stroke = 0.3,
@@ -483,7 +502,8 @@ ggplot(combined_da,
   theme(axis.text.y = element_text(colour = "black", size = 8, face = "bold"))+
   theme(axis.text.x = element_text(colour = "black", size = 8, angle = 90, hjust = 1, face = "plain"))
 
-  
+
+#[MA] Save it   
 mapply(function(x)
   ggsave(
   plot = last_plot(),
@@ -498,11 +518,11 @@ x=c("log2_Full.svg","log2_Full.png"))
 
 ```
 
-#Pheatmaps 
+#Pheatmaps [Figs.S4 & S5]
 
 ##Colors
 ```{r}
-#get vector for main families 
+#[MA] get vector for main families 
 main_families <- c(
   "Burkholderiaceae", 
   "Chitinophagaceae",
@@ -514,7 +534,7 @@ main_families <- c(
   "Streptomycetaceae",
   "Xanthobacteraceae")
 
-# Family colors matching the new logic
+#[MA] Family colors matching the new logic
 Family_col <- c(
     "Burkholderiaceae" = "#F7A7A4",      # Burkholderiales
     "Chitinophagaceae" = "#56B4E9",      # Chitinophagales
@@ -527,12 +547,11 @@ Family_col <- c(
     "Xanthobacteraceae" = "#D9A417")      # Rhizobiales - amarillo fuerte
 
 
-
-#Add gray for others
+#[MA] Add gray for others
 family_colors <- c(Family_col , "Other" = "grey70")
 
 
-#Main orders
+#[MA] Main orders
 main_orders <- c("Streptomycetales",
                  "Flavobacteriales",
                  "Burkholderiales",
@@ -540,8 +559,7 @@ main_orders <- c("Streptomycetales",
                  "Chitinophagales",
                  "Sphingobacteriales")
 
-
-#color vectors 
+#[MA] color vectors 
 Order_col <- c(
     "Streptomycetales" = "#CC79A7",       # Morado (antes Rhizobiales)
     "Flavobacteriales" = "#0072B2",       # Azul oscuro
@@ -550,18 +568,18 @@ Order_col <- c(
     "Chitinophagales" = "#56B4E9",        # Azul cielo
     "Sphingobacteriales" = "#009E73")      # Verde fuerte
 
-#Add gray for others
+#[MA] Add gray for others
 order_colors <- c(Order_col , "Other" = "grey70")
 
 
 ```
 
 
-##Endo
+##Endo [Fig.S4]
 Let's do one per compartment & use pheatmap
 ```{r}
 
-## Endo
+#[MA] Endo
 endo_da <- combined_da %>%
   filter(Compartment == "Root") %>%
   droplevels() %>% 
@@ -573,7 +591,7 @@ endo_da <- combined_da %>%
 
 endo_da$Condition
 
-# Set desired column order
+#[MA] Set desired column order
 order_endo <- c(
   "A. thaliana-Root-meJA 0.1mM", "A. thaliana-Root-meJA 1mM", "A. thaliana-Root-Caterpillar OS",
   "B. oleracea-Root-meJA 0.1mM", "B. oleracea-Root-meJA 1mM", "B. oleracea-Root-Caterpillar OS")
@@ -583,7 +601,7 @@ endo_da <- endo_da %>%
 
 endo_da <- endo_da %>% arrange(Family)
 
-#order by Phylum
+#[MA]order by Phylum
 endo_da <- endo_da %>%
   mutate(
     Phylum = as.character(Phylum),
@@ -591,28 +609,28 @@ endo_da <- endo_da %>%
     Family = as.character(Family)) %>%
   arrange(Phylum, Order, Family)
 
-#pivot to wide
+#[MA]pivot to wide
 heatmap_data_endo <- endo_da %>%
   dplyr::select(Label_full, Condition, log2FoldChange) %>%
   pivot_wider(names_from = Condition, values_from = log2FoldChange, values_fill = 0) %>%
   column_to_rownames("Label_full")
 
-#re-arrange columns
+#[MA]re-arrange columns
 heatmap_data_endo <- heatmap_data_endo[,order_endo]
 colnames(heatmap_data_endo) #ok
 
-# Annotation (Family info)
+#[MA] Annotation (Family info)
 row_anno_endo <- endo_da %>%
   dplyr::select(Label_full, Family_simplified, Order_simplified) %>%
   distinct() %>%
   column_to_rownames("Label_full")
 
-#make vector for colors
+#[MA]make vector for colors
 anno_colors <- list(
   Family_simplified = family_colors,
   Order_simplified = order_colors)
 
-# Plot heatmap
+#[MA] Plot heatmap
 pheatmap.endo <- pheatmap(as.matrix(heatmap_data_endo),
          color = colorRampPalette(c("blue", "white", "red"))(30),
          cluster_cols = FALSE,
@@ -626,13 +644,10 @@ pheatmap.endo <- pheatmap(as.matrix(heatmap_data_endo),
          border_color = "gray",
          main = "Differential Abundance - Endosphere")
 
-
-library(ggplotify)
-
-gg_p <- as.ggplot(pheatmap.endo) 
+gg_p <- as.ggplot(pheatmap.endo)  #to view it as ggplot
 gg_p
 
-#save heatmap
+#[MA] save heatmap
 mapply(function(x)
   ggsave(
   plot = last_plot(),
@@ -648,9 +663,10 @@ x=c("Pheatmap_Endo.svg","Pheatmap_Endo.png"))
 
 ```
 
-##Rhizo
+##Rhizo [Fig.S5]
 ```{r}
-## Rhizo
+
+#[MA] Rhizo
 rhizo_da <- combined_da %>%
   filter(Compartment == "Soil") %>% 
   droplevels() %>% 
@@ -660,7 +676,7 @@ rhizo_da <- combined_da %>%
   mutate(Order= as.character(Order))%>% 
   mutate(Order_simplified = ifelse(Order %in% main_orders, Order, "Other"))
 
-# Set desired column order
+#[MA] Set desired column order
 order_rhizo <- c(
   "A. thaliana-Soil-meJA 0.1mM", "A. thaliana-Soil-meJA 1mM", "A. thaliana-Soil-Caterpillar OS",
   "B. oleracea-Soil-meJA 0.1mM", "B. oleracea-Soil-meJA 1mM", "B. oleracea-Soil-Caterpillar OS")
@@ -670,7 +686,7 @@ rhizo_da <- rhizo_da %>%
 
 rhizo_da <- rhizo_da %>% arrange(Family)
 
-#order by Phylum
+#[MA]order by Phylum
 rhizo_da <- rhizo_da %>%
   mutate(
     Phylum = as.character(Phylum),
@@ -678,34 +694,33 @@ rhizo_da <- rhizo_da %>%
     Family = as.character(Family)) %>%
   arrange(Phylum, Order, Family)
 
-#pivot to wide
+#[MA]pivot to wide
 heatmap_data_rhizo <- rhizo_da %>%
   dplyr::select(Label_full, Condition, log2FoldChange) %>%
   pivot_wider(names_from = Condition, values_from = log2FoldChange, values_fill = 0) %>%
   column_to_rownames("Label_full")
 
-#re-arrange columns
+#[MA]re-arrange columns
 heatmap_data_rhizo <- heatmap_data_rhizo[,order_rhizo]
 colnames(heatmap_data_rhizo) #ok
 
-# Annotation (Family info)
+#[MA]Annotation (Family info)
 row_anno_rhizo <- rhizo_da %>%
   dplyr::select(Label_full, Family_simplified, Order_simplified) %>%
   distinct() %>%
   column_to_rownames("Label_full")
 
-#make vector for colors (change because not all of them are there)
+#[MA]make vector for colors (change because not all of them are there)
 anno_colors$Order_simplified <- anno_colors$Order_simplified[!names(anno_colors$Order_simplified)
                                                              %in% c("Streptomycetales", "Sphingobacteriales")]
 
-# Extraer las familias presentes en row_anno_rhizo
+#[MA] keep the families presentes en row_anno_rhizo
 families_to_keep <- unique(row_anno_rhizo$Family_simplified)
 
-# Filtrar el vector de colores
+#[MA]Filter vector color with those families 
 anno_colors$Family_simplified <- anno_colors$Family_simplified[names(anno_colors$Family_simplified) %in% families_to_keep]
 
-
-# Plot heatmap
+#[MA] Plot heatmap
 pheatmap.rhizo <- pheatmap(as.matrix(heatmap_data_rhizo),
          color = colorRampPalette(c("blue", "white", "red"))(30),
          cluster_cols = FALSE,
@@ -721,7 +736,7 @@ pheatmap.rhizo <- pheatmap(as.matrix(heatmap_data_rhizo),
 gg_pR <- as.ggplot(pheatmap.rhizo) 
 gg_pR
 
-#save heatmap
+#[MA]save heatmap
 mapply(function(x)
   ggsave(
   plot = last_plot(),
@@ -737,13 +752,13 @@ x=c("Pheatmap_Rhizo.svg","Pheatmap_Rhizo.png"))
 
 ```
 
-#Venn Diagrams
+#Venn Diagrams[Fig.2b]
 ```{r}
 
 combined_da
 str(combined_da)
 
-#how many DA ASVs were per plant species and root compartment?
+#[MA]how many DA ASVs were per plant species and root compartment?
 unique(combined_da$ASV) #117 total unique DA ASVs overall. Matches Table 1
 
 DA_counts <- combined_da %>%
@@ -753,46 +768,46 @@ DA_counts <- combined_da %>%
 
 DA_counts #81,11,29,7. A total of 128, Matches also Table 1
 
-#How many are repeated?
+#[MA]How many are repeated?
 combined_da %>%
   dplyr::count(ASV) %>%
   arrange(desc(n))
 
 library(nVennR)
 
-# Create a unique group ID combining Species and Compartment
+#[MA] Create a unique group ID combining Species and Compartment
 combined_da <- combined_da %>%
   mutate(ASV = as.character(ASV),# Make sure ASV is character to avoid retaining factor levels
          Group = paste(Species, Compartment, sep = "_"))
 
-# Create a list of ASVs for each group
+#[MA] Create a list of ASVs for each group
 DA_ASVs <- combined_da %>%
   group_by(Group) %>%
   summarise(ASVs = list(unique(ASV))) %>%
   deframe()
 
-# Draw the Venn diagram
-venn <- plotVenn(DA_ASVs, systemShow = TRUE) #this will give you an .svg file that you can save 
+#[MA] Draw the Venn diagram
+venn <- plotVenn(DA_ASVs, systemShow = TRUE) #this will open a .svg file that you can save 
 
 ```
 
 
-#Direction Log2FC summary
+#Direction Log2FC summary[Fig.2c]
 ```{r}
 
 combined_da
 
-#let's clean it
+#[MA] let's clean it
 combined_da_df <- combined_da%>%
   relocate(ASV, Species, Compartment, Treatment)%>%
-  rename(Plant_Species = Species) %>% 
-  dplyr::select(-(DADA2_ID:Label_full))%>% 
-  dplyr::select(-(pvalue:padj))
+  dplyr::rename(Plant_Species = Species) %>% #change label so it doesnt get confused with bacterial species
+  dplyr::select(-(DADA2_ID:Label_full))%>% #remove DADA2 ID
+  dplyr::select(-(pvalue:padj)) #remove these columns 
 
 head(combined_da_df)
 write.csv(combined_da_df, "./R output/05_differential_abundance/combined_da_df_clean.csv")
 
-#quick summary table 
+#[MA] quick summary table with percentage of positive and negative changes 
 summary_table <- combined_da_df %>%
   dplyr::group_by(Plant_Species, Compartment, Treatment) %>%
   summarise(n_ASVs = n_distinct(ASV),
@@ -802,7 +817,7 @@ summary_table <- combined_da_df %>%
   mutate(perc_positive = (n_positive_LFC / n_ASVs) * 100,
     perc_negative = (n_negative_LFC / n_ASVs) * 100)
 
-# Make it long
+#[MA] Make it long
 summary_long <- summary_table %>%
   pivot_longer(cols = c(n_positive_LFC, n_negative_LFC), 
                names_to = "Direction", 
@@ -810,7 +825,7 @@ summary_long <- summary_table %>%
   mutate(Direction = ifelse(Direction == "n_positive_LFC", "Positive LFC", "Negative LFC")) %>%
   mutate(Percentage = ifelse(Direction == "Positive LFC", perc_positive, perc_negative))
 
-# Create stacked bar plot with percentage labels inside the bars
+#[MA] Create stacked bar plot with percentage labels inside the bars [Figure 2c]
 ggplot(summary_long, aes(x = Treatment, y = Count, fill = Direction)) +
   geom_bar(stat = "identity") +
   geom_text(aes(label = paste0(round(Percentage, 1), "%")),
@@ -825,7 +840,7 @@ ggplot(summary_long, aes(x = Treatment, y = Count, fill = Direction)) +
   theme(axis.text.x = element_text(colour = "black", size = 11, face = "bold"))
   
 
-#save plot
+#[MA] save plot
 mapply(function(x)
   ggsave(
   plot = last_plot(),
@@ -840,93 +855,26 @@ x=c("Number_of_DA_BySp_Rc_JA.svg","Number_of_DA_BySp_Rc_JA.png"))
 
 ```
 
-```{r}
-#other summaries;
-#By Plant species and treatment
-summary_table_Sp_JA <- combined_da_df %>%
-  dplyr::group_by(Compartment, Treatment) %>%
-  summarise(n_ASVs = n_distinct(ASV),
-            n_positive_LFC = sum(log2FoldChange > 0),
-            n_negative_LFC = sum(log2FoldChange < 0),
-            .groups = "drop")
-
-#let's summarize taxonomy
-taxonomy_summary <- combined_da_df %>%
-  mutate(Direction = ifelse(log2FoldChange > 0, "Positive", "Negative")) %>%
-  group_by(Plant_Species, Compartment, Phylum, Class, Order, Family) %>%
-  summarise(n_ASVs = n_distinct(ASV), .groups = "drop")
-
-taxonomy_summary_Treatment <- combined_da_df %>%
-  mutate(Direction = ifelse(log2FoldChange > 0, "Positive", "Negative")) %>%
-  group_by(Plant_Species, Compartment, Treatment, Phylum, Class, Order, Family) %>%
-  summarise(n_ASVs = n_distinct(ASV), .groups = "drop")
-
-write.csv(taxonomy_summary, "./R output/05_differential_abundance/taxonomy_summary_SpRc.csv")
-
-```
-
-Explore by Plant Species 
-```{r}
-
-At_combined <- combined_da_df %>% subset(Plant_Species == "A. thaliana") %>% droplevels() 
-unique(At_combined$ASV)
-unique(At_combined$Family)
-
-#Only Endo
-At_Endo <- At_combined %>% 
-               subset(Compartment == "Root") %>% 
-               group_by(Family) %>% 
-               summarise(n_ASVs = n_distinct(ASV), .groups = "drop")%>%
-               arrange(n_ASVs)
-
-#Group by Family
-At_family <- At_combined %>% 
-  mutate(Direction = ifelse(log2FoldChange > 0, "Positive", "Negative")) %>%
-  group_by(Compartment, Family) %>%
-  summarise(n_ASVs = n_distinct(ASV), .groups = "drop")%>%
-  arrange(n_ASVs)
-
-unique(At_family$Family)
-
-#B. ole
-Bo_combined <- combined_da_df %>% subset(Plant_Species == "B. oleracea") %>% droplevels()
-unique(Bo_combined$ASV)
-unique(Bo_combined$Family)
-
-
-#Only Endo
-Bo_Endo <- Bo_combined  %>% 
-               subset(Compartment == "Root") %>% 
-               group_by(Family) %>% 
-               summarise(n_ASVs = n_distinct(ASV), .groups = "drop")%>%
-               arrange(n_ASVs)
-
-
-
-#subset
-At <- taxonomy_summary_Treatment  %>% subset(Plant_Species == "A. thaliana") %>% droplevels()
-Bo <- taxonomy_summary_Treatment %>% subset(Plant_Species == "B. oleracea") %>% droplevels()
-
-write.csv(At, "./R output/05_differential_abundance/taxonomy_summary_At.csv")
-write.csv(Bo, "./R output/05_differential_abundance/taxonomy_summary_Bo.csv")
-
-
-#subset
-Endo  <- taxonomy_summary_Treatment  %>% subset(Compartment == "Root") %>% droplevels()
-Rhizo <- taxonomy_summary_Treatment %>% subset(Compartment == "Soil") %>% droplevels()
-
-write.csv(Endo, "./R output/05_differential_abundance/taxonomy_summary_Endo.csv")
-write.csv(Rhizo , "./R output/05_differential_abundance/taxonomy_summary_Rhizo.csv")
-
-# View the table
-print(taxonomy_summary)
-
-```
 
 #Save data
 ```{r}
 
-saveRDS(combined_da, "./R output/05_differential_abundance/combined_da_df.rds")
+#First let's check that we've saved what we need
+DA_results_full #already saved
+DA_results #result split by Sp-Rc and treatment
+combined_da #already saved 
+DA_ASVs #list with DA ASVs per combination of Plant Species and Root compartment 
+combined_da_df #already saved
+
+#[MA]Let's save the vector with ASV names 
+saveRDS(DA_ASVs, "./R output/05_differential_abundance/DA_ASVs.rds")
+
+#[MA] Let's save the environment 
+save.image("./R output/env.5_differential_abundance.RData")
+
+#[MA] Now let's clean what we don't need for next script 6-Network Analysis
+rm(list = setdiff(ls(), c("normalization_listed", "physeq_filtered")))
+
 
 ```
 

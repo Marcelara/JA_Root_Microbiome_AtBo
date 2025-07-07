@@ -7,13 +7,29 @@ editor_options:
   chunk_output_type: console
 ---
 
+[MA] If coming from script 5, you should have 'physeq_filtered' load in your environment, if not load it here 
+```{r}
+
+#Load 'normalization_listed', a ps list with CSS, rarefied and non-rarefied
+normalization_listed <- readRDS("./R output/01_phyloseq_objects/normalization_listed.rds")
+
+#let's make it a single ps
+physeq_filtered <- normalization_listed$physeq_filtered
+
+#Split by Plant Species and Root compartment 
+ps_list_unormalized <- phyloseq_sep_variable(physeq_filtered, variable = "Sp_Comp")
+
+```
+
+[MA] It takes a long time to run the network analysis, for plots you can skip this part and load nodes and edges data already calculated by Pedro in Chunk 14, line XXX
+
 
 # load libraries and data
 ```{r}
-#source("./Code/Functions/load_libraries.R")
-#load("./R output/analysis_session.RData")
-```
+source("./Code/Functions/load_libraries.R")
+load("./R output/analysis_session.RData") #[MA]: This object doesn't exist
 
+```
 
 ##### 6.0 - load libraries & functions
 ```{r}
@@ -225,7 +241,7 @@ autoplot(list_network_metrics_pca,
 
 
 # save these network metrics externally
-write.csv(list_network_metrics, "./R output/netwrok_metrics.csv")
+write.csv(list_network_metrics, "./R output/06_network_analysis/netwrok_metrics.csv")
 ```
 
 
@@ -502,119 +518,125 @@ complete_node_metrics$Brassica_oleraceae.Soil[is.na(complete_node_metrics$Brassi
 # save these network metrics externally. we will do this manually for only 4 networks
 write.csv(
   x = complete_node_metrics$Arabidopsis_thaliana.Root,
-  file = "./R output/Nodes_AT_root.csv",
+  file = "./R output/06_network_analysis/Nodes_AT_root.csv",
   quote = FALSE,
   row.names = FALSE
 )
 write.csv(
   x = igraph::as_data_frame(listed_igraph$Arabidopsis_thaliana.Root),
-  file = "./R output/Edges_AT_root.csv",
+  file = "./R output/06_network_analysis/Edges_AT_root.csv",
   quote = FALSE
 )
 
 
 write.csv(
   x = complete_node_metrics$Arabidopsis_thaliana.Soil,
-  file = "./R output/Nodes_AT_soil.csv",
+  file = "./R output/06_network_analysis/Nodes_AT_soil.csv",
   quote = FALSE,
   row.names = FALSE
 )
 write.csv(
   x = igraph::as_data_frame(listed_igraph$Arabidopsis_thaliana.Soil),
-  file = "./R output/Edges_AT_soil.csv",
+  file = "./R output/06_network_analysis/Edges_AT_soil.csv",
   quote = FALSE
 )
 
 
 write.csv(
   x = complete_node_metrics$Brassica_oleraceae.Root,
-  file = "./R output/Nodes_BO_root.csv",
+  file = "./R output/06_network_analysis/Nodes_BO_root.csv",
   quote = FALSE,
   row.names = FALSE
 )
 write.csv(
   x = igraph::as_data_frame(listed_igraph$Brassica_oleraceae.Root),
-  file = "./R output/Edges_BO_root.csv",
+  file = "./R output/06_network_analysis/Edges_BO_root.csv",
   quote = FALSE
 )
 
 
 write.csv(
   x = complete_node_metrics$Brassica_oleraceae.Soil,
-  file = "./R output/Nodes_BO_soil.csv",
+  file = "./R output/06_network_analysis/Nodes_BO_soil.csv",
   quote = FALSE,
   row.names = FALSE
 )
 write.csv(
   x = igraph::as_data_frame(listed_igraph$Brassica_oleraceae.Soil),
-  file = "./R output/Edges_BO_soil.csv",
+  file = "./R output/06_network_analysis/Edges_BO_soil.csv",
   quote = FALSE
 )
 ```
 
-#Loading results
+#Reading results
+[MA] okay, so start here if you'd like to skip calculating the network analysis and instead just look at the plots
+Load first the libraries needed 
+
+## Load libraries
+```{r}
+
+library(readr) #to open csv's
+
+```
 
 ##Nodes
 ```{r}
 
-#Individual results
+#[MA] Individual results
 Nodes_AT_root <- read_csv("./R output/06_network_analysis/Nodes_AT_root.csv")
 Nodes_BO_root <- read_csv("./R output/06_network_analysis/Nodes_BO_root.csv")
 Nodes_AT_soil <- read_csv("./R output/06_network_analysis/Nodes_AT_soil.csv")
 Nodes_BO_soil <- read_csv("./R output/06_network_analysis/Nodes_BO_soil.csv")
 
-#network metrics (Summary)
+#[MA] network metrics (Summary)
 network_metrics <- read_csv("./R output/06_network_analysis/netwrok_metrics.csv")
 
-#check colnames
+#[MA] check colnames
 colnames(Nodes_AT_root)
 colnames(network_metrics)
 
-#make a list 
+#[MA] make a list 
 Nodes_list <- list(Nodes_AT_root = Nodes_AT_root,
                    Nodes_BO_root = Nodes_BO_root, 
                    Nodes_AT_soil = Nodes_AT_soil,
                    Nodes_BO_soil = Nodes_BO_soil)
 
-#check if keystone
+#[MA] check if keystone
 keystone_counts <- sapply(Nodes_list, function(df) {
     sum(df$keystone_taxa == "Keystone", na.rm = TRUE)})
 
 Nodes_BO_soil$keystone_taxa
 Nodes_BO_soil$keystone_taxa
 
-#save it as csv
-
 
 ```
 
 
 ```{r}
-#Now, let's add the classification as module hub or module connector 
+#[MA] Now, let's add the classification as module hub or module connector 
 
-#  Function to classify hubs and connectors
+#[MA] Function to classify hubs and connectors
 add_module_roles <- function(df) {
   df <- df %>%
     mutate(
       module_hub = ifelse(Zi > 2.5, "Module Hub", "Non-Hub"),
       module_connector = ifelse(Pi > 0.62, "Module Connector", "Non-Connector")
     )
-  return(df)
-}
+  return(df)}
 
-# Apply to all dataframes in the list
+#[MA] Apply to all dataframes in the list
 Nodes_list <- lapply(Nodes_list, add_module_roles)
 
-# Count hubs and connectors per sub-community
+ #Count hubs and connectors per sub-community
 module_summary <- lapply(Nodes_list, function(df) {
   data.frame(
     Module_Hubs = sum(df$module_hub == "Module Hub", na.rm = TRUE),
     Module_Connectors = sum(df$module_connector == "Module Connector", na.rm = TRUE)
   )
-}) #ok, perfect, now it matches the `network metrics` summary
+}) #[MA] ok, perfect, now it matches the `network metrics` summary
 
 
-#get info of only those classified as central ASVs (hubs+connectors)
+#[MA] get info of only those classified as central ASVs (hubs+connectors+keystone)
 central_keystone_asv_list <- lapply(Nodes_list, function(df) {
   df %>%
     filter(
@@ -622,26 +644,16 @@ central_keystone_asv_list <- lapply(Nodes_list, function(df) {
       module_connector == "Module Connector" |
       keystone_taxa == "Keystone"
     )
-}) #this is the one Pedro used for the Fisher test
+}) #[MA]this is the one Pedro used for the Fisher test
 
-#make it a single df 
+#[MA]make it a single df 
 central_keystone_asv_df <- bind_rows(central_keystone_asv_list, .id = "Sub_community")
 central_keystone_asv_df  <- as.data.frame(central_keystone_asv_df)
 head(central_keystone_asv_df)
 
-
-#save this output;
+#[MA]save this output;
 saveRDS(central_keystone_asv_df, "./R output/Network files/ASVs_central_Network_Analysis_df.rds")
 
-#clean-up for space
-rm(add_module_roles, Nodes_list, central_asv_list, central_keystone_asv_list, Nodes_AT_root, Nodes_AT_soil,
-   Nodes_BO_root, Nodes_BO_soil)
-
-```
-
-```{r}
-
-x <- central_keystone_asv_df %>% filter(keystone_taxa == "Keystone")
 
 ```
 
@@ -649,19 +661,19 @@ x <- central_keystone_asv_df %>% filter(keystone_taxa == "Keystone")
 ##Edges
 ```{r}
 
-#Individual results
+#[MA]Individual results
 Edges_AT_root <- read_csv("./R output/06_network_analysis/Edges_AT_root.csv")
 Edges_BO_root <- read_csv("./R output/06_network_analysis/Edges_BO_root.csv")
 Edges_AT_soil <- read_csv("./R output/06_network_analysis/Edges_AT_soil.csv")
 Edges_BO_soil <- read_csv("./R output/06_network_analysis/Edges_BO_soil.csv")
 
-#quick plot
+#[MA]quick plot
 ggplot(Edges_AT_root, aes(x = weight, fill = positive_negative)) +
     geom_histogram(bins = 30, color = "black") +
     labs(x = "Edge weight", y = "Count") +
     theme_minimal()
 
-#quick plot
+#[MA]quick plot
 Edges_AT_root %>%
     ggplot(aes(x = weighted_edge_betweenness)) +
     geom_histogram(bins = 30, fill = "steelblue", color = "black") +
@@ -671,82 +683,24 @@ Edges_AT_root %>%
 
 ```
 
-Quick exploration with plots (skip)
-```{r}
-
-library(tidyverse)
-
-# Clasificar los nodos de AT_root como keystone, hub o connector
-Nodes_AT_root <- Nodes_AT_root %>%
-    mutate(module_hub = ifelse(Zi > 2.5, "Module Hub", "Non-Hub"),
-           module_connector = ifelse(Pi > 0.62, "Module Connector", "Non-Connector"),
-           is_keystone = keystone_taxa == "Keystone" | 
-                         module_hub == "Module Hub" | 
-                         module_connector == "Module Connector")
-
-# Quedarse solo con edges donde ambos nodos son keystones/hubs/connectors
-
-Nodes_AT_root <- Nodes_AT_root %>%
-    mutate(Family = ifelse(grepl("^f__", Family), gsub("^f__", "", Family), Family))
-
-
-edges_with_taxa <- Edges_AT_root %>%
-    left_join(Nodes_AT_root %>% select(Row.names, Family, is_keystone), 
-              by = c("from" = "Row.names")) %>%
-    left_join(Nodes_AT_root %>% select(Row.names, Family, is_keystone), 
-              by = c("to" = "Row.names")) %>%
-    dplyr::rename(from_family = Family.x, from_keystone = is_keystone.x,
-           to_family = Family.y, to_keystone = is_keystone.y) %>%
-    filter(from_keystone | to_keystone)
-  
-head(edges_with_taxa)
-
-edges_with_taxa <- Edges_AT_root %>%
-    left_join(Nodes_AT_root %>% select(Row.names, Family, module_hub, module_connector), 
-              by = c("from" = "Row.names")) %>%
-    left_join(Nodes_AT_root %>% select(Row.names, Family, module_hub, module_connector), 
-              by = c("to" = "Row.names")) %>%
-    dplyr::rename(from_family = Family.x, from_hub = module_hub.x, from_connector = module_connector.x,
-                  to_family = Family.y, to_hub = module_hub.y, to_connector = module_connector.y) %>%
-    filter(from_hub == "Module Hub" | from_connector == "Module Connector" |
-           to_hub == "Module Hub" | to_connector == "Module Connector")
-
- 
-library(ggalluvial)
-
-edges_with_taxa %>%
-    count(from_family, to_family, positive_negative) %>%
-    ggplot(aes(axis1 = from_family, axis2 = to_family, y = n, fill = positive_negative)) +
-    geom_alluvium(width = 0.2, alpha = 0.8) +
-    geom_stratum() +
-    geom_text(stat = "stratum", aes(label = after_stat(stratum)), size = 3) +
-    scale_fill_manual(values = c("positive" = "#66c2a5", "negative" = "#fc8d62")) +
-    labs(x = "Family", y = "Number of edges", fill = "Edge Type",
-         title = "AT Root - Family connections (Hubs + Connectors)") +
-    theme_minimal() +
-    theme(strip.text = element_text(face = "bold"),
-          axis.text.x = element_text(angle = 45, hjust = 1))
-
-
-```
 
 ##Arrange data 
 ```{r}
 
-#make new column
+#[MA]make new column
 Nodes_AT_root$Sub_community <- "AT_root"
 Nodes_AT_soil$Sub_community <- "AT_soil"
 Nodes_BO_root$Sub_community <- "BO_root"
 Nodes_BO_soil$Sub_community <- "BO_soil"
 
-#make a single df 
+#[MA]make a single df 
 all_nodes <- bind_rows(
     Nodes_AT_root,
     Nodes_AT_soil,
     Nodes_BO_root,
     Nodes_BO_soil)
 
-# Clasificación (Keystone/Hubs/Connectors)
+#[MA]Clasificación (Keystone/Hubs/Connectors)
 all_nodes <- all_nodes %>%
     mutate(module_hub = ifelse(Zi > 2.5, "Module Hub", "Non-Hub"),
            module_connector = ifelse(Pi > 0.62, "Module Connector", "Non-Connector"),
@@ -757,7 +711,7 @@ all_nodes <- all_nodes %>%
                module_connector == "Module Connector" ~ "Connector",
                TRUE ~ "Other"))
 
-#clean taxonomy
+#[MA]clean taxonomy
 all_nodes <- all_nodes %>%
     mutate(Domain = gsub("^d__", "", Domain),
         Phylum = gsub("^p__", "", Phylum),
@@ -767,7 +721,7 @@ all_nodes <- all_nodes %>%
         Genus = gsub("^g__", "", Genus),
         Species = gsub("^s__", "", Species))
 
-#important families we've been highlighting 
+#[MA]important families we've been highlighting 
 main_families <- c(
   "Burkholderiaceae", 
   "Chitinophagaceae",
@@ -779,25 +733,25 @@ main_families <- c(
   "Streptomycetaceae",
   "Xanthobacteraceae") 
 
-#make new column with these families written and otherwise, 'Other' will appear
+#[MA]make new column with these families written and otherwise, 'Other' will appear
 all_nodes  <- all_nodes  %>%
     mutate(Family_simplified = ifelse(Family %in% main_families, Family, "Other"))
 
-#check
+#[MA]check
 head(as.data.frame(all_nodes)) #ok
 
-#re-order for the plot
+#[MA]re-order for the plot
 all_nodes <- all_nodes %>%
     mutate(Sub_community = factor(Sub_community, levels = c("AT_root", "BO_root", "AT_soil", "BO_soil")))
 
 
 ```
 
-#Zi-Pi plot
+#Zi-Pi plot[Fig.4b]
 ##Color management
 ```{r}
 
-#load full taxonomy table df
+#[MA] load full taxonomy table df
 taxonomy_table_full <- readRDS("./R output/10_summary_results/taxonomy_table_full.rds")
 
 main_families <- c("Burkholderiaceae", 
@@ -810,7 +764,7 @@ main_families <- c("Burkholderiaceae",
   "Streptomycetaceae",
   "Xanthobacteraceae") 
 
-#lets check to which order they belong to
+#[MA]lets check to which order they belong to
 main_families_order_class <- taxonomy_table_full %>%
     filter(Family %in% main_families) %>%
     dplyr::select(Family, Order, Class) %>%
@@ -818,10 +772,10 @@ main_families_order_class <- taxonomy_table_full %>%
 
 rownames(main_families_order_class) <- NULL #delete rownames 
 
-#Get main orders 
+#[MA]Get main orders 
 main_orders <- unique(main_families_order_class$Order)
 
-#let's just write them here so we can view them
+#[MA]let's just write them here so we can view them
 main_orders <- c("Streptomycetales",
                  "Flavobacteriales",
                  "Burkholderiales",
@@ -830,8 +784,8 @@ main_orders <- c("Streptomycetales",
                  "Sphingobacteriales")
 
 
-#color vectors 
-# Order colors - you can adapt these if needed
+#[MA]color vectors 
+#[MA]Order colors - you can adapt these if needed
 Order_col <- c(
     "Streptomycetales" = "#CC79A7",       # Morado (antes Rhizobiales)
     "Flavobacteriales" = "#0072B2",       # Azul oscuro
@@ -840,7 +794,7 @@ Order_col <- c(
     "Chitinophagales" = "#56B4E9",        # Azul cielo
     "Sphingobacteriales" = "#009E73")      # Verde fuerte
 
-# Family colors matching the new logic
+#[MA] Family colors matching the new logic
 Family_col <- c(
     "Burkholderiaceae" = "#F7A7A4",      # Burkholderiales
     "Chitinophagaceae" = "#56B4E9",      # Chitinophagales
@@ -853,14 +807,13 @@ Family_col <- c(
     "Xanthobacteraceae" = "#D9A417")      # Rhizobiales - amarillo fuerte
 
 
-
-#Add gray for others
+#[MA]Add gray for others
 order_colors <- c(Order_col, "Other" = "grey70")
 family_colors <- c(Family_col , "Other" = "grey70")
 
 ```
 
-
+[MA] Settings for plots 
 ```{r}
 #Set plots theme
 ggplot2::theme_set(theme_bw())
@@ -875,21 +828,19 @@ axis_looks <- theme(axis.text.x = element_text(colour = "black", size = 9,
         panel.grid.minor = element_blank()) #no grid
 ```
 
-
-
-## Full plot
+## Full plot[Fig.4b]
 ```{r}
 
-#Full; also with regular nodes 
+#[MA]Full; also with regular nodes 
 
-# Define keystone shapes and regular shape for Other
+#[MA] Define keystone shapes and regular shape for Other
 keystone_shapes <- c(
     "Keystone (manual)" = 23,
     "Hub" = 21,
     "Connector" = 22,
     "Other" = 16)  # Regular point
 
-#plot it 
+#[MA]plot it 
 ggplot(all_nodes, aes(x = Zi, y = Pi,
                       shape = Keystone_Type,
                       fill = Family_simplified, color = Family_simplified)) +
@@ -918,14 +869,14 @@ ggplot(all_nodes, aes(x = Zi, y = Pi,
 
 ```
 
-Highlighting Mucilaginibacter
+[MA]Highlighting Mucilaginibacter
 ```{r}
-#Now if you want to highlight Mucilinagibacter;
+#[MA]Now if you want to highlight Mucilinagibacter;
 mucilagi_asvs <- all_nodes %>%
     filter(Genus == "Mucilaginibacter" & Keystone_Type %in% c("Connector", "Hub", "Keystone (manual)"))
 print(mucilagi_asvs$Row.names)
 
-#plot it 
+#[MA]plot it 
 ggplot(all_nodes, aes(x = Zi, y = Pi,
                       shape = Keystone_Type, fill = Family_simplified, color = Family_simplified)) +
     geom_point(data = all_nodes %>% filter(Keystone_Type == "Other"),
@@ -951,7 +902,7 @@ ggplot(all_nodes, aes(x = Zi, y = Pi,
     axis_looks +
     theme(legend.position = "top")
 
-#Save plot
+#[MA]Save plot
 mapply(function(x)
   ggsave(
   plot = last_plot(),
@@ -967,9 +918,9 @@ x=c("Zi_Pi.svg","Zi_Pi.png"))
 
 ```
 
-Only keystone
+Only central taxa
 ```{r}
-#plot only the keystone taxa
+#[MA]plot only the central taxa
 # Nos quedamos solo con los nodos importantes (descartamos "Other")
 keystone_nodes <- all_nodes %>%
     filter(Keystone_Type != "Other")
@@ -1008,27 +959,51 @@ ggplot(keystone_nodes, aes(x = Zi, y = Pi,
 
 ```
 
-#Venn Diagrams
+#Venn Diagrams[Fig.4c] 
 ```{r}
 
-#let's load the list we already have with the JA-responsive ASVs per method
-important_ASV_list <- readRDS("./R output/10_summary_results/important_ASV_list.rds")
+keystone_nodes #In here you have only central taxa, let's split it by Plant Species and Compartment 
 
-#keep only those of random forest
-na_asv_list <- important_ASV_list$NA_ASV_list
+#[MA]: Make a list per Plant Sp and Rc
+central_list <- split(keystone_nodes, keystone_nodes$Sub_community)
 
-#how many DA ASVs were per plant species and root compartment?
-sapply(na_asv_list, length)
+#Let's keep only the ASV names 
+central_asv_list <- lapply(central_list, function(df) df$Row.names)
 
-#load nVennR to make ven diagram
+#[MA]Other option: let's load the list we already have with the JA-responsive ASVs per method
+#important_ASV_list <- readRDS("./R output/10_summary_results/important_ASV_list.rds")
+
+#[MA]keep only those of Network Analysis
+#na_asv_list <- important_ASV_list$NA_ASV_list
+
+#[MA]how many DA ASVs were per plant species and root compartment?
+sapply(central_asv_list, length)
+
+#[MA]load nVennR to make ven diagram
 library(nVennR)
 
-# Draw the Venn diagram
-venn <- plotVenn(na_asv_list, systemShow = TRUE) #this will give you an .svg file that you can save 
+#[MA]Draw the Venn diagram
+venn <- plotVenn(central_asv_list, systemShow = TRUE) #this will give you an .svg file that you can save 
 
 ```
 
+#Save data
+```{r}
 
+#First let's check that we've saved what we need
+central_asv_list
 
+#[MA]Let's save the vector with ASV names 
+saveRDS(central_asv_list, "./R output/06_network_analysis/NA_ASVs.rds")
 
-after this, plot netowrk on cytoscape. network analysis complete! proceed to script 7_random_forest
+#[MA] Let's save the environment 
+save.image("./R output/env.6_network_analysis.RData")
+
+#[MA] Now let's clean what we don't need for next script 7-Random Forest
+rm(list = setdiff(ls(), c("normalization_listed")))
+
+```
+
+After this, plot network or load network file MeJA_pilot_networks.cys on cytoscape.  
+Network analysis complete! proceed to script 7_random_forest
+
