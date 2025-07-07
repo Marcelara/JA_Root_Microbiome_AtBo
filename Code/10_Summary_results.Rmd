@@ -5,11 +5,6 @@ date: "2025-03-01"
 output: html_document
 ---
 
-Clean up
-```{r}
-rm(ps_rf_list, ps_imp_taxa_l, ps_list_treat, plots, plot_Endo, plot_Rhizo, plot, ps_family, ps_at_root_important)
-gc()
-```
 
 #Load libraries 
 ```{r}
@@ -38,9 +33,9 @@ axis_looks <- theme(axis.text.x = element_text(colour = "black", size = 9,
         panel.grid.minor = element_blank()) #no grid
 
 #Set colors
-color_treatments <- c("#FBF2C4", "#DEA868", "#C7522B", "#9BBAA0") #"Control", "MeJA 0.1mM", "MeJA 1mM", "P. brassicae OS"
-color_species <- c("#146627ff", "#1fb695ff") #at & bo, respectively
-color_compartment <- c("#e7b083ff", "#905423ff") #endo & rhizo, respectively
+color_treatments <- c("#d7d7d7", "#f2c476", "#bd5a28", "#7aaf91") #"Control", "MeJA 0.1mM", "MeJA 1mM", "P. brassicae OS"
+color_species <- c("#006c3a", "#309190") #at & bo, respectively
+color_compartment <- c("#B28F45", "#846475") #endo & rhizo, respectively (not really used)
 ```
 
 
@@ -48,14 +43,32 @@ color_compartment <- c("#e7b083ff", "#905423ff") #endo & rhizo, respectively
 #Loading data
 ```{r}
 
-combined_da_df #results differential abundance 
-central_keystone_asv_df #results network analysis 
-important_data_list #results random forest
+#[MA] load DA results
+DA_results <- readRDS("./R output/05_differential_abundance/DA_ASVs.rds")
 
-#Vectors with just names of ASVs
-DA_ASV_list <- important_ASV_list$DA_ASV_list
-NA_ASV_list <- important_ASV_list$NA_ASV_list
-RF_ASV_list <- important_ASV_list$RF_ASV_list
+#Change the name to list 
+DA_ASV_list <- DA_results
+
+#[MA] Let's change the names 
+names(DA_ASV_list) <- c("Arabidopsis_thaliana.Root", "Arabidopsis_thaliana.Soil", "Brassica_oleraceae.Root", "Brassica_oleraceae.Soil")
+
+#[MA] load NA results
+NA_results <- readRDS("./R output/06_network_analysis/NA_ASVs.rds")
+
+#[MA] Change names
+NA_ASV_list <- NA_results
+names(NA_ASV_list) <- c("Arabidopsis_thaliana.Root", "Brassica_oleraceae.Root", "Arabidopsis_thaliana.Soil",  "Brassica_oleraceae.Soil")
+
+#[MA] Finally 3. Random Forest
+
+#[MA] load RF results
+RF_results <- readRDS("./R output/07_random_forest/RF_ASVs.rds")
+
+#[MA] Change names
+RF_ASV_list <- RF_results
+
+names(RF_ASV_list) <- c("Arabidopsis_thaliana.Root", "Arabidopsis_thaliana.Soil", "Brassica_oleraceae.Root",  "Brassica_oleraceae.Soil")
+
 
 #let's save it into a list 
 important_ASV_list <- list(DA_ASV_list = DA_ASV_list, 
@@ -66,8 +79,8 @@ saveRDS(important_ASV_list, "./R output/10_summary_results/important_ASV_list.rd
 
 ```
 
+Also get a single df with all of the info, could be used later.
 ```{r}
-
 
 # 1. DA
 da_df <- DA_ASV_list %>%
@@ -160,10 +173,155 @@ write.csv(full_important_df_wide , "./R output/10_summary_results/important_ASVs
 rm(physeq_filtered)
 ```
 
-maybe later think to add for those of DA, whether they come from meja 0.1, 1 or OS, as well for RF
+[MA] maybe later think to add for those of DA, whether they come from meja 0.1, 1 or OS, as well for RF
 
 
+#UpsetR plots[Fig.S7]
+```{r}
+
+library(UpSetR)
+library(ComplexUpset)
+library(tibble)
+
+
+#[MA] call function  adding a Dummy variable with value of 85, so all axis are the same in between plots.
+make_upset_plot_complexDummy <- function(da_list, na_list, rf_list, species, compartment) {
+  subcommunity_name <- paste(species, compartment, sep = ".")
+
+  # Safety check
+  if (!(subcommunity_name %in% names(da_list) &&
+        subcommunity_name %in% names(na_list) &&
+        subcommunity_name %in% names(rf_list))) {
+    stop(paste0("Subcommunity '", subcommunity_name, "' not found in one or more lists"))
+  }
+
+  # Get ASVs per method
+  da_asvs <- da_list[[subcommunity_name]]
+  na_asvs <- na_list[[subcommunity_name]]
+  rf_asvs <- rf_list[[subcommunity_name]]
+
+  # Combine all unique ASVs across methods
+  all_asvs <- unique(c(da_asvs, na_asvs, rf_asvs))
+
+  # Build tidy presence/absence tibble
+  upset_data <- tibble(
+    ASV = all_asvs,
+    DA = ASV %in% da_asvs,
+    NetA = ASV %in% na_asvs,
+    RF = ASV %in% rf_asvs
+  )
+
+  # Add dummy rows to force the y-axis to go up to 85
+  dummy_data <- tibble(
+    ASV = paste0("dummy_", 1:85),  # 85 dummy ASVs (1 per "bar count")
+    DA = FALSE, NetA = FALSE, RF = FALSE  # Not present in any method
+  )
+
+  upset_data <- bind_rows(upset_data, dummy_data)
+
+  # Generate UpSet plot using ComplexUpset
+  upset_plot <- ComplexUpset::upset(
+    upset_data,
+    intersect = c("DA", "NetA", "RF"),
+    name = "Method",
+    width_ratio = 0.25,
+    sort_sets = FALSE
+  ) +
+    labs(title = paste(species, compartment, "- ASV Overlap"))
+
+  return(upset_plot)
+}
+
+
+#[MA] plot it
+upset_AtRoot <- make_upset_plot_complexDummy(DA_ASV_list, NA_ASV_list, RF_ASV_list, 
+                        species = "Arabidopsis_thaliana", 
+                        compartment = "Root")
+
+
+upset_AtSoil <- make_upset_plot_complexDummy(DA_ASV_list, NA_ASV_list, RF_ASV_list, 
+                        species = "Arabidopsis_thaliana", 
+                        compartment = "Soil")
+
+
+upset_BoRoot <- make_upset_plot_complexDummy(DA_ASV_list, NA_ASV_list, RF_ASV_list, 
+                        species = "Brassica_oleraceae", 
+                        compartment = "Root")
+
+upset_BoSoil <- make_upset_plot_complexDummy(DA_ASV_list, NA_ASV_list, RF_ASV_list, 
+                        species = "Brassica_oleraceae", 
+                        compartment = "Soil")
+
+
+ggarrange(upset_AtRoot, upset_BoRoot, upset_AtSoil, upset_BoSoil, nrow=2, ncol=2)
+
+#[MA] save plot [Figure S7]
+mapply(function(x)
+  ggsave(
+  plot = last_plot(),
+  filename =x,
+  path = "./Plots/10_summary_results",
+  scale = 2,
+  width = 1200,
+  height = 1100,
+  units = "px",
+  dpi = 300),
+x=c("upset.svg","upset.png"))
+
+
+```
+
+Make overall UpsetR plot (Not used)
+```{r}
+
+# Combine ASVs across all compartments and species
+all_DA_ASVs <- unique(unlist(DA_ASV_list))
+all_NA_ASVs <- unique(unlist(NA_ASV_list))
+all_RF_ASVs <- unique(unlist(RF_ASV_list))
+
+# Combine all unique ASVs detected by any method
+all_ASVs <- unique(c(all_DA_ASVs, all_NA_ASVs, all_RF_ASVs)) #224 unique ones, ok
+
+# Build tidy presence/absence tibble
+upset_data_global <- tibble(
+  ASV = all_ASVs,
+  DA = ASV %in% all_DA_ASVs,
+  NetA = ASV %in% all_NA_ASVs,
+  RF = ASV %in% all_RF_ASVs)
+
+
+# Create global UpSet plot
+upset_global <- ComplexUpset::upset(
+  upset_data_global,
+  intersect = c("DA", "NetA", "RF"),
+  name = "Method",
+  width_ratio = 0.25,
+  sort_sets = FALSE) +
+  labs(title = "Overall ASV Overlap Across Methods (Global)") #very few shared 
+
+upset_global
+
+
+#[MA] save plot
+mapply(function(x)
+  ggsave(
+  plot = last_plot(),
+  filename =x,
+  path = "./Plots/10_summary_results",
+  scale = 2,
+  width = 7,
+  height = 5,
+  units = "cm",
+  dpi = 300),
+x=c("upset_overall.svg","upset_overall.png"))
+
+```
+
+
+#Save data
 ```{r}
 save.image("./R output/env.10_summary_results.RData")
 ```
 
+
+The end! :)
