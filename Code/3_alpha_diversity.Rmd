@@ -10,7 +10,9 @@ editor_options:
 
 #General Settings
 
-## load libraries and data
+## Load libraries
+[MA]: Load only packages that you'll need in this script
+
 ```{r}
 
 #Set working directory to project directory if starting fresh
@@ -46,19 +48,25 @@ library("car")  # for Levene's test
 
 ```
 
-Load environment from 2_beta_diversity.Rmd script if starting this script from scratch
+## Load data 
+[MA] If continuing from script 2 you should have "normalization_listed" and "ps_list_CSS" in your environment
+[MA] If yes, just go straight to line 68. If not, load data 
 ```{r}
-#load("./R output/env.2_beta_diversity.RData")
 
-#let's clean what its not necessary 
-rm(a, AT_Endo, AT_Rhizo, BO_Endo, BO_Rhizo, b, centroids, df_info, df_NMDS, df_NMDS_split, df_NMDS_split_full,
-   df_NMDS_split2, df_summ, df_UMAP,p, perm_by4, perm2, nmds_rootAndSoil, NMDS_4_slice, dip_result3,
-   three_way_permanova, s.bray, x,y, sample_data, bray, contaminants)
+#Load 'normalization_listed', a ps list with CSS, rarefied and non-rarefied
+normalization_listed <- readRDS("./R output/01_phyloseq_objects/normalization_listed.rds")
+
+#Get rarefied data 
+#First full ps with 2 species and 2 compartments 
+physeq_filtered_rarefied <- normalization_listed$physeq_filtered_rarefied
+
+#Now load rarified data split by Species and Compartment
+ps_list_rarefied <- readRDS("./R output/01_phyloseq_objects/ps_list_rarefied.rds")
 
 ```
 
-
 ## Settings for plots 
+[MA]: Load general settings for plots (axis, treatment colors, etc)
 ```{r}
 
 #Set plots theme
@@ -74,9 +82,9 @@ axis_looks <- theme(axis.text.x = element_text(colour = "black", size = 9,
         panel.grid.minor = element_blank()) #no grid
 
 #Set colors
-color_treatments <- c("#D6D6D6", "#E6C37A", "#A65A2A", "#8BAE91") #"Control", "MeJA 0.1mM", "MeJA 1mM", "P. brassicae OS"
-color_species <- c("#5A8F8F", "#2F6B3A") #at & bo, respectively
-color_compartment <- c("#B28F45", "#846475") #endo & rhizo, respectively
+color_treatments <- c("#d7d7d7", "#f2c476", "#bd5a28", "#7aaf91") #"Control", "MeJA 0.1mM", "MeJA 1mM", "P. brassicae OS"
+color_species <- c("#006c3a", "#309190") #at & bo, respectively
+color_compartment <- c("#B28F45", "#846475") #endo & rhizo, respectively (not really used)
 
 ```
 
@@ -92,24 +100,27 @@ simple Alpha diversity plots
 
 # as noted above, we will use rarefied data, filtered at at least 8 occurences in the dataset
 # This is a very simple plot, but will serve for a visualization
-plot_richness(physeq_filtered_rarefied, x = "MeJA_treatment", measures = c("Observed"), color = "Plant_species") +
+plot_richness(physeq_filtered_rarefied, x = "MeJA_treatment",
+              measures = c("Observed"), color = "Plant_species") +
   theme_bw() +
   theme(axis.text.x = element_text(angle = 90)) +
   labs(color = "Plant species") +
   ylab("Observed number of ASVs") +
   facet_wrap(~Sample_type)
 
-# as we could already expect, soils are more diverse than roots. for Brassica However the difference, if significant, is very small
+# as we could already expect, Rhizosphere is more diverse than Endosphere. For Brassica However the difference, if significant, is very small
+
 ```
 
 ##Full
 
-Here we check shanon diversity indexes
+### Stats
+Here we check Shannon diversity indexes
 ```{r}
 # Calculate richness for root and soil
 total_diversity <- estimate_richness(physeq_filtered_rarefied) %>%
   rownames_to_column(var = "Sample")
-total_diversity$Sample <- sub("X", "", total_diversity$Sample) # why the hell that X popped up? this fix it
+total_diversity$Sample <- sub("X", "", total_diversity$Sample) # why that X popped up? this fix it
 alpha_diversity <- column_to_rownames(total_diversity, var = "Sample") #df with only alpha metrics
 
 
@@ -120,18 +131,23 @@ sample_data(physeq_filtered_rarefied) <- merge_phyloseq(physeq_filtered_rarefied
 total_diversity <- as(sample_data(physeq_filtered_rarefied), "data.frame") # forces sample data of updated phyloseq object into a dataframe
 
 
-# check homogeniety of variances
-leveneTest((Shannon) ~ Plant_species * MeJA_treatment * Sample_type, data = total_diversity)
+# check homogeneity of variances
+leveneTest((Shannon) ~ Plant_species * MeJA_treatment * Sample_type, data = total_diversity) #[MA] not sig, ok
 
-#Overall community
+#Overall community [Table S4]
 # two-way anova, shanon diversity index: 
 tx <- with(total_diversity, interaction(MeJA_treatment, Plant_species, Sample_type)) # needed for tukey to test interaction
 aovTukey <- aov(Shannon ~ tx, data = total_diversity) # needed for tukey to test interaction
+
+#Get results from LM testing interactions in Shannon diversity 
 lm <- Anova(lm((Shannon) ~ Plant_species * MeJA_treatment * Sample_type,
                data = total_diversity,
          contrasts = list(MeJA_treatment = contr.sum, Plant_species = contr.sum)), type = "2")
-lm <- as.data.frame(lm)
-write.table(lm, "clipboard", sep = "\t", row.names = TRUE) #then copy directly in excel 
+
+lm <- as.data.frame(lm) #[MA]: This is Table S4
+
+#[MA] Get table into clipboard to paste it directly in excel
+write.table(lm, "clipboard", sep = "\t", row.names = TRUE) 
 
 #check post-hoc
 HSD.test(aovTukey, "tx", group = TRUE, console = TRUE) # post-hoc
@@ -140,7 +156,8 @@ HSD.test(aovTukey, "tx", group = TRUE, console = TRUE) # post-hoc
 
 ###Plot
 ```{r}
-# Lets see this on a simple boxplot for Shannon diversity index
+
+# [MA] Lets see this on a simple boxplot for Shannon diversity index
 plot_alpha_Shannon <- ggplot(total_diversity,
                        aes(x = MeJA_treatment, y = Shannon, fill = MeJA_treatment)) +
   geom_boxplot() +
@@ -157,8 +174,10 @@ plot_alpha_Shannon <- ggplot(total_diversity,
    theme(axis.ticks.x = element_blank())+
    theme(legend.position = "top")
 
+plot_alpha_Shannon 
 
-#save plot
+
+# [MA] save plot, [This is Figure S3]
 mapply(function(x)
   ggsave(
   plot = last_plot(),
@@ -180,6 +199,8 @@ x=c("Shannon.svg","Shannon.png"))
 ###Stats
 Now that we see clear diversity effects, let's check in details to detect key pairwise differences wiht lists and loops
 
+[MA]: For this you will use the rarefied list split by Species and Root compartment "ps_list_rarefied"
+
 ```{r}
 
 # this will add the diversity metrics to a phyloseq object
@@ -189,7 +210,7 @@ add_diversity_to_physeq_object <- function(phyloseq_object) {
   total_diversity <- estimate_richness(phyloseq_object) %>%
     rownames_to_column(var = "Sample")
 
-  total_diversity$Sample <- sub("X", "", total_diversity$Sample) # why the hell that X popped up? this fix it
+  total_diversity$Sample <- sub("X", "", total_diversity$Sample) # why that X popped up? this fix it
   total_diversity <- column_to_rownames(total_diversity, var = "Sample")
 
 
@@ -201,6 +222,7 @@ add_diversity_to_physeq_object <- function(phyloseq_object) {
 
   return(diversity)
 }
+
 
 # runs new custom function on a list of phyloseq objects, making a list of dataframes with alpha diversity indexes
 diversity_list <- lapply(ps_list_rarefied, add_diversity_to_physeq_object)
@@ -219,32 +241,32 @@ aov_list <- lapply(diversity_list, function(x) {
 
 # run anova
 aov_l <- lapply(aov_list, anova)
+aov_l
 
  # check tukey
 lapply(aov_list, function(x) {
   TukeyHSD(x, "MeJA_treatment")
 })
 
-#get df 
+#[MA]get df 
 
-# Function to extract a cleaned ANOVA table from each element
+#[MA] Function to extract a cleaned ANOVA table from each element
 extract_anova_table <- function(anova_result, sample_name) {
   as.data.frame(anova_result) %>%
     tibble::rownames_to_column("Source") %>%
-    mutate(Sample = sample_name)
-}
+    mutate(Sample = sample_name)}
 
-# Apply this function to every element in the list
+#[MA] Apply this function to every element in the list
 combined_anova <- map2_df(aov_l, names(aov_l), extract_anova_table)
 
-# split the Sample column into Plant_species and Compartment
+#[MA] split the Sample column into Plant_species and Compartment
 combined_anova <- combined_anova %>%
   separate(Sample, into = c("Plant_species", "Compartment"), sep = "\\.")
 
-# Final combined table
+#[MA] Final combined table [This is Table S5]
 print(combined_anova)
 
-#copy it to excel
+#[MA] Copy it to excel
 write.table(combined_anova, "clipboard", sep = "\t", row.names = FALSE) #then copy directly in excel 
 
 
@@ -253,9 +275,32 @@ write.table(combined_anova, "clipboard", sep = "\t", row.names = FALSE) #then co
 #Save session
 ```{r}
 
+#[MA] First let's save the alpha diversity results:
+alpha_diversity #full alpha diversity
+diversity_list  #alpha diversity by combination of Species and Root compartment
+physeq_filtered_rarefied #phyloseq with alpha diversity results in sample_Data
+
+#[MA]Save full 
+saveRDS(alpha_diversity,
+        "./R output/03_alpha_diversity/alpha_diversity_full.rds") 
+
+#[MA]Save list
+save(diversity_list,
+        file= "./R output/03_alpha_diversity/alpha_diversity_BySpeciesAndRootCompartment_list.RData") 
+
+#[MA] Save ps 
+saveRDS(physeq_filtered_rarefied,
+        "./R output/01_phyloseq_objects/physeq_filtered_rarefied_withAlphaDiversity.rds") 
+
+#[MA] Let's save the environment 
 save.image("./R output/env.3_alpha_diversity.RData")
+
+#[MA] Now let's clean what we don't need for next script 5-differential abundance 
+rm(list = setdiff(ls(), c("normalization_listed")))
+
+
 ```
 
-Alpha Diversity analyised! proceed to scrip 4_neutral_models!
+Alpha Diversity analysed! proceed to scrip 5_differential_abundance!
 
 

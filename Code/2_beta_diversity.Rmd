@@ -555,6 +555,14 @@ write.table(combined_perm, "clipboard", sep = "\t", row.names = FALSE)
 
 save.image("./R output/env.2_beta_diversity.RData")
 
+
+normalization_listed
+ps_list_CSS 
+
+
+#Remove what you don't need for next script and keep phyloseq lists
+rm(list = setdiff(ls(), c("normalization_listed", "ps_list_CSS")))
+
 ```
 
 Beta Diversity analysed! proceed to scrip 3_Alpha_Diversity!
