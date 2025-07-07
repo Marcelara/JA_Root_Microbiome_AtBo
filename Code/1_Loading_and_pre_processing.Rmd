@@ -329,9 +329,7 @@ normalization_listed
 
 # 1.5 - Data ready for analysis! proceed to scrip 2_Beta_Diversity!
 
-Save R objects 
-
-
+[MA]: Save individual phyloseq or phyloseq lists as R objects so they are easier to use in future scripts.
 ```{r}
 
 saveRDS(normalization_listed,
@@ -349,6 +347,5 @@ saveRDS(ps_list_rarefied,
 
 #save all just in case 
 save.image("./R output/env.1_Loading_and_pre_processing.RData")
-
 
 ```
